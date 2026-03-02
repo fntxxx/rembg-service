@@ -67,8 +67,10 @@ async def remove_bg(
     model: Optional[str] = Query(None),
 ):
     # ---- Basic validation ----
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Unsupported file type")
+    if file.content_type and (file.content_type.startswith("image/") or file.content_type == "application/octet-stream"):
+    pass
+else:
+    raise HTTPException(status_code=400, detail="Unsupported file type")
 
     raw = await file.read()
     if not raw:
