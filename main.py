@@ -44,6 +44,15 @@ def get_session(model_name: str):
             _sessions[model_name] = new_session(model_name)
         return _sessions[model_name]
 
+@app.get("/")
+def root():
+    return {
+        "service": "rembg-service",
+        "endpoints": {
+            "health": "/health",
+            "remove_bg": "POST /remove-bg"
+        }
+    }
 
 @app.get("/health")
 def health():
