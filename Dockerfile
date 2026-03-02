@@ -5,6 +5,12 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
+ENV OMP_NUM_THREADS=1
+ENV OPENBLAS_NUM_THREADS=1
+ENV MKL_NUM_THREADS=1
+ENV VECLIB_MAXIMUM_THREADS=1
+ENV NUMEXPR_NUM_THREADS=1
+
 # Pillow / rembg 可能需要的系統相依（保守加）
 # 另外加 curl + ca-certificates，讓 build 階段可下載模型
 RUN apt-get update && apt-get install -y --no-install-recommends \

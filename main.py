@@ -84,31 +84,35 @@ def health():
 @app.post("/remove-bg")
 async def remove_bg(
     file: UploadFile = File(...),
-    max_side: int = Query(0, ge=0, le=4096),
+    max_side: int = Query(512, ge=128, le=1024),  # 先鎖在 512~1024，避免 free 記憶體爆
 ):
     data = await file.read()
     if not data:
         raise HTTPException(status_code=400, detail="檔案內容為空")
-    if len(data) > 12 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="檔案大小超過 12MB")
+    if len(data) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="檔案大小超過 8MB（free 方案先保守）")
 
-    session = get_session()
-
+    # 先縮圖再推論，降低記憶體與時間
     try:
-        # 不縮圖：走最快路徑（直接 remove 原始 bytes）
-        if max_side <= 0:
-            out_bytes = await run_in_threadpool(lambda: remove(data, session=session))
-            return Response(content=out_bytes, media_type="image/png")
-
-        # 需要縮圖：才解碼 → 縮放 → 轉 PNG bytes → remove
         img = _load_image_from_upload(data)
         img = _resize_max_side(img, max_side)
         png_bytes = _to_png_bytes(img)
+    except HTTPException:
+        raise
+    except Exception as e:
+        return JSONResponse(status_code=400, content={"error": "image decode failed", "detail": str(e)})
+
+    try:
+        print(f"[remove-bg] start: filename={file.filename} size={len(data)} max_side={max_side}")
+        session = get_session()
+        print("[remove-bg] session ready")
 
         out_bytes = await run_in_threadpool(lambda: remove(png_bytes, session=session))
+        print(f"[remove-bg] done: out={len(out_bytes)} bytes")
         return Response(content=out_bytes, media_type="image/png")
 
     except Exception as e:
+        print(f"[remove-bg] failed: {e}")
         return JSONResponse(
             status_code=500,
             content={"error": "remove-bg failed", "detail": str(e)},
