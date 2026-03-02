@@ -3,16 +3,15 @@ FROM python:3.10-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-WORKDIR /app
-
+# 降低推論時執行緒與記憶體尖峰
 ENV OMP_NUM_THREADS=1
 ENV OPENBLAS_NUM_THREADS=1
 ENV MKL_NUM_THREADS=1
 ENV VECLIB_MAXIMUM_THREADS=1
 ENV NUMEXPR_NUM_THREADS=1
 
-# Pillow / rembg 可能需要的系統相依（保守加）
-# 另外加 curl + ca-certificates，讓 build 階段可下載模型
+WORKDIR /app
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
@@ -23,12 +22,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# build 階段先把 u2netp 模型放進 image，避免 runtime 才下載造成啟動變慢 + 更容易 OOM
+# 預先打包小模型 u2netp，避免執行時才下載
 RUN mkdir -p /root/.u2net \
   && curl -L --fail -o /root/.u2net/u2netp.onnx \
      https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx
 
 COPY main.py .
 
-EXPOSE 8000
-CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+# HF Docker Space 預設 port 為 7860
+EXPOSE 7860
+
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-7860}"]
