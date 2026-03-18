@@ -1,5 +1,6 @@
 import io
 import os
+import time
 import threading
 import numpy as np
 from typing import Dict, Optional
@@ -11,6 +12,12 @@ from PIL import Image, ImageFilter
 from rembg import remove, new_session
 
 app = FastAPI()
+
+@app.on_event("startup")
+def warmup_models():
+    # 預載常用模型，避免第一次 request 卡住
+    get_session("u2netp")   # base
+    get_session("u2net")    # fallback
 
 # ---- Session cache (lazy load) ----
 _sessions: Dict[str, object] = {}
@@ -90,28 +97,30 @@ async def remove_bg(
     if not raw:
         raise HTTPException(status_code=400, detail="Empty file")
 
+    timing = {}
+    request_started_at = time.perf_counter()
+
+    timing["fallback_used"] = False
+    timing["fallback_sec"] = 0.0
+
     # ---- Resize to control cost ----
     try:
-        img = Image.open(io.BytesIO(raw)).convert("RGBA")
-        original_full = img.copy()
+        resize_started_at = time.perf_counter()
 
-        original_buf = io.BytesIO()
-        original_full.save(original_buf, format="PNG")
-        original_full_bytes = original_buf.getvalue()
+        # 真正的原圖（最後保色、輸出用）
+        original_full = Image.open(io.BytesIO(raw)).convert("RGBA")
+
+        # 工作圖（縮小後給 rembg / alpha pipeline 用）
+        img = original_full.copy()
+        img.thumbnail((max_side, max_side), Image.LANCZOS)
+
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        in_bytes = buf.getvalue()
+
+        timing["resize_sec"] = round(time.perf_counter() - resize_started_at, 4)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid image")
-
-    w, h = img.size
-    longest = max(w, h)
-    if longest > max_side:
-        scale = max_side / float(longest)
-        nw, nh = int(w * scale), int(h * scale)
-        img = img.resize((nw, nh), Image.LANCZOS)
-
-    # encode resized image to bytes (keeps pipeline deterministic)
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    in_bytes = buf.getvalue()
 
     # ---- Choose model ----
     model_name = model or DEFAULT_MODEL
@@ -121,7 +130,9 @@ async def remove_bg(
         raise HTTPException(status_code=400, detail=str(e))
 
     try:
+        base_remove_started_at = time.perf_counter()
         out_bytes = run_remove(in_bytes, model_name, quality)
+        timing["base_remove_sec"] = round(time.perf_counter() - base_remove_started_at, 4)
     except Exception as e:
         return JSONResponse(
             status_code=502,
@@ -129,11 +140,10 @@ async def remove_bg(
         )
 
     try:
+        postprocess_started_at = time.perf_counter()
+
         # 用去背結果的 alpha，但保留原圖 RGB，避免衣物本體顏色漂移
         out_img = Image.open(io.BytesIO(out_bytes)).convert("RGBA")
-
-        if out_img.size != original_full.size:
-            out_img = out_img.resize(original_full.size, Image.LANCZOS)
 
         original_rgba = original_full.convert("RGBA")
 
@@ -164,12 +174,15 @@ async def remove_bg(
             )
         ):
             print(">>> USING FALLBACK <<<", foreground_ratio, alpha_mean)
-            fallback_model = "isnet-general-use"
-            fallback_quality = "high"
+            fallback_model = "u2net"
+            fallback_quality = "fast"
 
             try:
-                fallback_bytes = run_remove(original_full_bytes, fallback_model, fallback_quality)
+                fallback_started_at = time.perf_counter()
+                fallback_bytes = run_remove(in_bytes, fallback_model, fallback_quality)
                 fallback_img = Image.open(io.BytesIO(fallback_bytes)).convert("RGBA")
+                timing["fallback_sec"] = round(time.perf_counter() - fallback_started_at, 4)
+                timing["fallback_used"] = True
             except Exception as e:
                 return JSONResponse(
                     status_code=502,
@@ -180,9 +193,6 @@ async def remove_bg(
                         "quality": fallback_quality,
                     },
                 )
-
-            if fallback_img.size != original_full.size:
-                fallback_img = fallback_img.resize(original_full.size, Image.LANCZOS)
 
             fallback_alpha = fallback_img.getchannel("A")
             base_alpha = alpha  # 原本 u2netp 的 alpha
@@ -247,12 +257,34 @@ async def remove_bg(
             if foreground_ratio <= 0.45:
                 alpha = alpha.filter(ImageFilter.GaussianBlur(radius=0.6))
 
-        merged = original_rgba.copy()
+        # alpha 還在小圖
+
+        # 👉 resize alpha 到原圖
+        target_size = original_full.size
+
+        # 👉 限制最大輸出尺寸
+        max_output_side = 1024
+
+        w, h = target_size
+        longest = max(w, h)
+
+        if longest > max_output_side:
+            scale = max_output_side / float(longest)
+            target_size = (int(w * scale), int(h * scale))
+
+        # resize 原圖 + alpha 同步
+        original_resized = original_full.resize(target_size, Image.LANCZOS)
+        alpha = alpha.resize(target_size, Image.LANCZOS)
+
+        merged = original_resized.copy()
         merged.putalpha(alpha)
 
         final_buf = io.BytesIO()
         merged.save(final_buf, format="PNG")
         final_bytes = final_buf.getvalue()
+
+        timing["postprocess_sec"] = round(time.perf_counter() - postprocess_started_at, 4)
+        timing["total_sec"] = round(time.perf_counter() - request_started_at, 4)
     except Exception as e:
         return JSONResponse(
             status_code=502,
@@ -263,5 +295,22 @@ async def remove_bg(
                 "quality": quality,
             },
         )
+
+    print(
+        "[remove-bg timing]",
+        {
+            "model": model_name,
+            "quality": quality,
+            "max_side": max_side,
+            "resize_sec": timing["resize_sec"],
+            "base_remove_sec": timing["base_remove_sec"],
+            "fallback_used": timing["fallback_used"],
+            "fallback_sec": timing["fallback_sec"],
+            "postprocess_sec": timing["postprocess_sec"],
+            "total_sec": timing["total_sec"],
+            "foreground_ratio": round(foreground_ratio, 6),
+            "alpha_mean": round(alpha_mean, 4),
+        }
+    )
 
     return Response(content=final_bytes, media_type="image/png")
