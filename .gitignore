@@ -26,3 +26,6 @@ uploads/
 # Hugging Face / model cache
 .cache/
 huggingface/
+
+outputs_*
+report_*

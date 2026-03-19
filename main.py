@@ -124,6 +124,7 @@ async def remove_bg(
 
     # ---- Choose model ----
     model_name = model or DEFAULT_MODEL
+    actual_model = model_name
     try:
         get_session(model_name)
     except ValueError as e:
@@ -163,8 +164,6 @@ async def remove_bg(
 
         print(">>> BEFORE FALLBACK CHECK <<<", model_name, quality, foreground_ratio, alpha_mean)
 
-        # ---- Targeted fallback for sparse / pale hard cases ----
-        # 只攔極少數低 alpha、低前景占比案例，避免影響 apparel 主線速度
         if (
             model_name == "u2netp"
             and quality == "fast"
@@ -200,8 +199,28 @@ async def remove_bg(
             fallback_np = np.array(fallback_alpha, dtype=np.float32)
             base_np = np.array(base_alpha, dtype=np.float32)
 
-            # 混合（保留 edge + 補主體）
-            alpha_np = fallback_np * 0.72 + base_np * 0.28
+            # 只在 base 很弱的地方才讓 fallback 介入，避免污染已經正確的主體邊界
+            weak_base_mask = base_np < 50
+            very_weak_mask = base_np < 25
+            mask = (fallback_np > 10) & weak_base_mask
+
+            alpha_np = base_np.copy()
+            blended = fallback_np[mask] * 0.78 + base_np[mask] * 0.22
+
+            cap = np.where(base_np[mask] < 25, base_np[mask] + 120, base_np[mask] + 80)
+            alpha_np[mask] = np.minimum(blended, cap)
+
+            force_mask = (fallback_np > 10) & (base_np < 15)
+
+            # 只保留比較連續的弱區，避免把鞋底雜訊顆粒直接拉亮
+            force_alpha = np.zeros_like(alpha_np, dtype=np.float32)
+            force_alpha[force_mask] = fallback_np[force_mask] * 1.1
+
+            force_img = Image.fromarray(np.clip(force_alpha, 0, 255).astype(np.uint8))
+            force_img = force_img.filter(ImageFilter.GaussianBlur(radius=0.6))
+            force_np = np.array(force_img, dtype=np.float32)
+
+            alpha_np = np.maximum(alpha_np, force_np)
 
             alpha_np = np.clip(alpha_np, 0, 255)
             alpha = Image.fromarray(alpha_np.astype(np.uint8))
@@ -212,9 +231,8 @@ async def remove_bg(
             foreground_pixels = sum(1 for p in alpha_data if p >= 8)
             foreground_ratio = foreground_pixels / total_pixels
 
-            model_name = fallback_model
-            quality = fallback_quality
             used_fallback = True
+            actual_model = f"{model_name}+fallback"
             original_rgba = original_full.convert("RGBA")
 
         # 先做「分流」，再套不同 curve
@@ -225,14 +243,24 @@ async def remove_bg(
 
         if used_fallback:
             alpha_np = np.array(alpha, dtype=np.float32)
+            mid_alpha_ratio = float(((alpha_np >= 10) & (alpha_np <= 200)).mean())
 
-            alpha_np = np.where(alpha_np < 10, 0, alpha_np)
-            alpha_np = np.clip(alpha_np, 0, 255).astype(np.uint8)
+            # 針對低 + 中低 alpha 做「收斂」，但避免傷到鞋底主體
+            low_mask = alpha_np < 30
+            mid_mask = (alpha_np >= 30) & (alpha_np < 80)
 
-            alpha = Image.fromarray(alpha_np).filter(ImageFilter.GaussianBlur(radius=1.2))
+            alpha_np = np.clip(alpha_np, 0, 255)
+            alpha = Image.fromarray(alpha_np.astype(np.uint8))
+
+            # 只在中低前景占比時做更輕的 blur，避免鞋底邊緣被再度抹薄
+            if (
+                0.14 <= foreground_ratio <= 0.24
+                and alpha_mean > 60
+                and mid_alpha_ratio < 0.08
+            ):
+                alpha = alpha.filter(ImageFilter.GaussianBlur(radius=0.3))
 
             debug_alpha = np.array(alpha, dtype=np.uint8)
-            debug_alpha = np.where(debug_alpha < 15, 0, debug_alpha).astype(np.uint8)
             debug_alpha_mean = float(debug_alpha.mean())
             debug_foreground_ratio = float((debug_alpha >= 8).mean())
             debug_mid_alpha_ratio = float(((debug_alpha >= 10) & (debug_alpha <= 200)).mean())
@@ -243,8 +271,6 @@ async def remove_bg(
                 debug_alpha_mean,
                 debug_mid_alpha_ratio,
             )
-
-            alpha = Image.fromarray(debug_alpha)
         else:
             if foreground_ratio >= 0.42 and alpha_mean >= 95:
                 alpha = alpha.point(lambda p: int(min(255, max(0, (p - 30) * 1.8))))
@@ -253,8 +279,10 @@ async def remove_bg(
             else:
                 alpha = alpha.point(lambda p: int(min(255, max(0, (p - 48) * 1.18))))
 
-            # 👉 新增條件（只在「非高密度主體」才 blur）
-            if foreground_ratio <= 0.45:
+            if alpha_mean < 60:
+                # 低對比，禁止 blur
+                pass
+            elif 0.08 <= foreground_ratio <= 0.35:
                 alpha = alpha.filter(ImageFilter.GaussianBlur(radius=0.6))
 
         # alpha 還在小圖
@@ -313,4 +341,11 @@ async def remove_bg(
         }
     )
 
-    return Response(content=final_bytes, media_type="image/png")
+    return Response(
+        content=final_bytes,
+        media_type="image/png",
+        headers={
+            "X-RemoveBg-Fallback-Used": "true" if timing["fallback_used"] else "false",
+            "X-RemoveBg-Model": actual_model,
+        }
+    )

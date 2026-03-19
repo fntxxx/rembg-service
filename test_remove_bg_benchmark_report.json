@@ -1,9 +1,9 @@
 {
   "api_url": "http://127.0.0.1:7860/remove-bg",
   "dataset_dir": "D:\\DevData\\remove_bg_testset",
-  "total_cases": 36,
+  "total_cases": 35,
   "total_configs": 1,
-  "script_elapsed_sec": 34.4666,
+  "script_elapsed_sec": 32.3541,
   "filters": {
     "subset": null,
     "config": [
@@ -23,10 +23,10 @@
         "total": 24,
         "success": 24,
         "failed": 0,
-        "avg_elapsed_sec": 0.622,
-        "max_elapsed_sec": 1.454,
-        "min_elapsed_sec": 0.4486,
-        "avg_foreground_ratio": 0.428015
+        "avg_elapsed_sec": 0.6144,
+        "max_elapsed_sec": 1.3239,
+        "min_elapsed_sec": 0.4713,
+        "avg_foreground_ratio": 0.42541
       },
       "items": [
         {
@@ -34,7 +34,7 @@
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\chromatic\\blue_dress_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.6493,
+          "elapsed_sec": 0.4856,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -43,19 +43,19 @@
           "analysis": {
             "width": 201,
             "height": 251,
-            "foreground_pixels": 22389,
-            "foreground_ratio": 0.443777,
-            "avg_alpha": 108.7449,
-            "mid_alpha_ratio": 0.020852
+            "foreground_pixels": 21835,
+            "foreground_ratio": 0.432796,
+            "avg_alpha": 108.748,
+            "mid_alpha_ratio": 0.009138
           },
-          "output_size_bytes": 32291
+          "output_size_bytes": 31128
         },
         {
           "file": "blue_pants_01.jpg",
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\chromatic\\blue_pants_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.5165,
+          "elapsed_sec": 0.499,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -64,19 +64,19 @@
           "analysis": {
             "width": 183,
             "height": 275,
-            "foreground_pixels": 18281,
-            "foreground_ratio": 0.363259,
-            "avg_alpha": 83.4533,
-            "mid_alpha_ratio": 0.029091
+            "foreground_pixels": 17836,
+            "foreground_ratio": 0.354416,
+            "avg_alpha": 83.4492,
+            "mid_alpha_ratio": 0.017546
           },
-          "output_size_bytes": 27725
+          "output_size_bytes": 27269
         },
         {
           "file": "blue_top_01.jpg",
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\chromatic\\blue_top_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.5237,
+          "elapsed_sec": 0.5457,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -97,7 +97,7 @@
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\chromatic\\green_dress_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.5363,
+          "elapsed_sec": 0.4909,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -118,7 +118,7 @@
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\chromatic\\green_outer_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.505,
+          "elapsed_sec": 0.4731,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -139,7 +139,7 @@
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\chromatic\\green_top_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.4727,
+          "elapsed_sec": 0.4713,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -160,7 +160,7 @@
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\chromatic\\orange_red_top_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.4923,
+          "elapsed_sec": 0.4735,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -169,19 +169,19 @@
           "analysis": {
             "width": 183,
             "height": 275,
-            "foreground_pixels": 19689,
-            "foreground_ratio": 0.391237,
-            "avg_alpha": 90.8467,
-            "mid_alpha_ratio": 0.023646
+            "foreground_pixels": 19175,
+            "foreground_ratio": 0.381023,
+            "avg_alpha": 90.8443,
+            "mid_alpha_ratio": 0.011307
           },
-          "output_size_bytes": 18696
+          "output_size_bytes": 18318
         },
         {
           "file": "pink_dress_01.jpg",
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\chromatic\\pink_dress_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.4486,
+          "elapsed_sec": 0.503,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -202,7 +202,7 @@
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\chromatic\\pink_skirt_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.5249,
+          "elapsed_sec": 0.534,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -223,7 +223,7 @@
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\chromatic\\purple_skirt_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.7138,
+          "elapsed_sec": 0.714,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -232,19 +232,19 @@
           "analysis": {
             "width": 490,
             "height": 612,
-            "foreground_pixels": 123959,
-            "foreground_ratio": 0.413362,
-            "avg_alpha": 98.3978,
-            "mid_alpha_ratio": 0.012365
+            "foreground_pixels": 123232,
+            "foreground_ratio": 0.410938,
+            "avg_alpha": 98.4156,
+            "mid_alpha_ratio": 0.009074
           },
-          "output_size_bytes": 102721
+          "output_size_bytes": 102345
         },
         {
           "file": "dark_brown_sweater_01.jpg",
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\dark_neutral\\dark_brown_sweater_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.4866,
+          "elapsed_sec": 0.4898,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -265,7 +265,7 @@
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\dark_neutral\\dark_charcoal_hoodie_01.webp",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 1.454,
+          "elapsed_sec": 1.3239,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -274,19 +274,19 @@
           "analysis": {
             "width": 1024,
             "height": 1024,
-            "foreground_pixels": 387018,
-            "foreground_ratio": 0.369089,
-            "avg_alpha": 86.9882,
-            "mid_alpha_ratio": 0.01599
+            "foreground_pixels": 384518,
+            "foreground_ratio": 0.366705,
+            "avg_alpha": 87.0067,
+            "mid_alpha_ratio": 0.012565
           },
-          "output_size_bytes": 710923
+          "output_size_bytes": 711119
         },
         {
           "file": "dark_charcoal_outer_01.jpg",
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\dark_neutral\\dark_charcoal_outer_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.974,
+          "elapsed_sec": 0.9353,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -295,19 +295,19 @@
           "analysis": {
             "width": 768,
             "height": 1024,
-            "foreground_pixels": 317422,
-            "foreground_ratio": 0.403623,
-            "avg_alpha": 95.539,
-            "mid_alpha_ratio": 0.015364
+            "foreground_pixels": 315526,
+            "foreground_ratio": 0.401212,
+            "avg_alpha": 95.5586,
+            "mid_alpha_ratio": 0.012221
           },
-          "output_size_bytes": 237584
+          "output_size_bytes": 237537
         },
         {
           "file": "dark_gray_knit_top_01.jpg",
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\dark_neutral\\dark_gray_knit_top_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.5105,
+          "elapsed_sec": 0.5418,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -328,7 +328,7 @@
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\dark_neutral\\neutral_gray_outer_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.4816,
+          "elapsed_sec": 0.5136,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -349,7 +349,7 @@
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\dark_neutral\\neutral_gray_pants_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.4876,
+          "elapsed_sec": 0.4867,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -370,7 +370,7 @@
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\light_neutral\\light_beige_pants_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.943,
+          "elapsed_sec": 0.9484,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -379,19 +379,19 @@
           "analysis": {
             "width": 768,
             "height": 1024,
-            "foreground_pixels": 182755,
-            "foreground_ratio": 0.232385,
-            "avg_alpha": 45.492,
-            "mid_alpha_ratio": 0.023755
+            "foreground_pixels": 180901,
+            "foreground_ratio": 0.230028,
+            "avg_alpha": 45.5193,
+            "mid_alpha_ratio": 0.018131
           },
-          "output_size_bytes": 182443
+          "output_size_bytes": 182437
         },
         {
           "file": "light_beige_top_01.png",
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\light_neutral\\light_beige_top_01.png",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.5937,
+          "elapsed_sec": 0.6455,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -400,19 +400,19 @@
           "analysis": {
             "width": 397,
             "height": 350,
-            "foreground_pixels": 57533,
-            "foreground_ratio": 0.414055,
-            "avg_alpha": 98.1053,
-            "mid_alpha_ratio": 0.013847
+            "foreground_pixels": 56602,
+            "foreground_ratio": 0.407355,
+            "avg_alpha": 98.1049,
+            "mid_alpha_ratio": 0.006261
           },
-          "output_size_bytes": 58790
+          "output_size_bytes": 56534
         },
         {
           "file": "light_lilac_dress_01.jpg",
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\light_neutral\\light_lilac_dress_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.5022,
+          "elapsed_sec": 0.5361,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -433,7 +433,7 @@
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\light_neutral\\light_lilac_top_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.5622,
+          "elapsed_sec": 0.4845,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -442,19 +442,19 @@
           "analysis": {
             "width": 194,
             "height": 259,
-            "foreground_pixels": 19139,
-            "foreground_ratio": 0.380906,
-            "avg_alpha": 88.073,
-            "mid_alpha_ratio": 0.025893
+            "foreground_pixels": 18787,
+            "foreground_ratio": 0.3739,
+            "avg_alpha": 88.0686,
+            "mid_alpha_ratio": 0.016578
           },
-          "output_size_bytes": 25694
+          "output_size_bytes": 25166
         },
         {
           "file": "light_pink_top_01.jpg",
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\light_neutral\\light_pink_top_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.5128,
+          "elapsed_sec": 0.5495,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -463,19 +463,19 @@
           "analysis": {
             "width": 194,
             "height": 259,
-            "foreground_pixels": 18455,
-            "foreground_ratio": 0.367293,
-            "avg_alpha": 85.0709,
-            "mid_alpha_ratio": 0.023723
+            "foreground_pixels": 17993,
+            "foreground_ratio": 0.358098,
+            "avg_alpha": 85.068,
+            "mid_alpha_ratio": 0.012658
           },
-          "output_size_bytes": 22101
+          "output_size_bytes": 21418
         },
         {
           "file": "pattern_dress_01.jpg",
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\pattern\\pattern_dress_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.5269,
+          "elapsed_sec": 0.5567,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -496,7 +496,7 @@
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\pattern\\pattern_skirt_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.4986,
+          "elapsed_sec": 0.474,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -517,7 +517,7 @@
           "file_path": "D:\\DevData\\remove_bg_testset\\apparel\\pattern\\pattern_top_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 1.0117,
+          "elapsed_sec": 1.0704,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -547,10 +547,10 @@
         "total": 4,
         "success": 4,
         "failed": 0,
-        "avg_elapsed_sec": 0.9427,
-        "max_elapsed_sec": 1.6514,
-        "min_elapsed_sec": 0.5019,
-        "avg_foreground_ratio": 0.30693
+        "avg_elapsed_sec": 0.9407,
+        "max_elapsed_sec": 1.6288,
+        "min_elapsed_sec": 0.5132,
+        "avg_foreground_ratio": 0.307041
       },
       "items": [
         {
@@ -558,7 +558,7 @@
           "file_path": "D:\\DevData\\remove_bg_testset\\footwear\\dark\\brown_shoes_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 1.1063,
+          "elapsed_sec": 1.0964,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -567,19 +567,19 @@
           "analysis": {
             "width": 768,
             "height": 1024,
-            "foreground_pixels": 286311,
-            "foreground_ratio": 0.364063,
-            "avg_alpha": 86.0303,
-            "mid_alpha_ratio": 0.014627
+            "foreground_pixels": 284522,
+            "foreground_ratio": 0.361788,
+            "avg_alpha": 86.0468,
+            "mid_alpha_ratio": 0.011724
           },
-          "output_size_bytes": 617235
+          "output_size_bytes": 616852
         },
         {
           "file": "dark_black_shoes_01.jpg",
           "file_path": "D:\\DevData\\remove_bg_testset\\footwear\\dark\\dark_black_shoes_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.5114,
+          "elapsed_sec": 0.5243,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -600,7 +600,7 @@
           "file_path": "D:\\DevData\\remove_bg_testset\\footwear\\light\\light_beige_shoes_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 1.6514,
+          "elapsed_sec": 1.6288,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -609,19 +609,19 @@
           "analysis": {
             "width": 183,
             "height": 275,
-            "foreground_pixels": 10329,
-            "foreground_ratio": 0.205246,
-            "avg_alpha": 43.8125,
-            "mid_alpha_ratio": 0.052757
+            "foreground_pixels": 10466,
+            "foreground_ratio": 0.207968,
+            "avg_alpha": 41.6681,
+            "mid_alpha_ratio": 0.061083
           },
-          "output_size_bytes": 27042
+          "output_size_bytes": 28192
         },
         {
           "file": "orange_shoes_01.jpg",
           "file_path": "D:\\DevData\\remove_bg_testset\\footwear\\light\\orange_shoes_01.jpg",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 0.5019,
+          "elapsed_sec": 0.5132,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -648,42 +648,21 @@
         "max_side": 512
       },
       "summary": {
-        "total": 8,
-        "success": 8,
+        "total": 7,
+        "success": 7,
         "failed": 0,
-        "avg_elapsed_sec": 1.5796,
-        "max_elapsed_sec": 1.6697,
-        "min_elapsed_sec": 1.4325,
-        "avg_foreground_ratio": 0.339183
+        "avg_elapsed_sec": 1.5718,
+        "max_elapsed_sec": 1.6817,
+        "min_elapsed_sec": 1.4255,
+        "avg_foreground_ratio": 0.301331
       },
       "items": [
-        {
-          "file": "bed_dress_01.png",
-          "file_path": "D:\\DevData\\remove_bg_testset\\flatlay\\bed\\bed_dress_01.png",
-          "ok": true,
-          "status_code": 200,
-          "elapsed_sec": 1.6697,
-          "params": {
-            "model": "u2netp",
-            "quality": "fast",
-            "max_side": 512
-          },
-          "analysis": {
-            "width": 1024,
-            "height": 558,
-            "foreground_pixels": 336796,
-            "foreground_ratio": 0.589431,
-            "avg_alpha": 147.9974,
-            "mid_alpha_ratio": 0.012186
-          },
-          "output_size_bytes": 1186474
-        },
         {
           "file": "bed_hoodie_01.png",
           "file_path": "D:\\DevData\\remove_bg_testset\\flatlay\\bed\\bed_hoodie_01.png",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 1.4939,
+          "elapsed_sec": 1.4793,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -692,19 +671,19 @@
           "analysis": {
             "width": 1024,
             "height": 558,
-            "foreground_pixels": 199632,
-            "foreground_ratio": 0.349378,
-            "avg_alpha": 81.0668,
-            "mid_alpha_ratio": 0.023297
+            "foreground_pixels": 197382,
+            "foreground_ratio": 0.345441,
+            "avg_alpha": 81.0921,
+            "mid_alpha_ratio": 0.018016
           },
-          "output_size_bytes": 1201186
+          "output_size_bytes": 1201954
         },
         {
           "file": "bed_shirt_01.png",
           "file_path": "D:\\DevData\\remove_bg_testset\\flatlay\\bed\\bed_shirt_01.png",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 1.6562,
+          "elapsed_sec": 1.6817,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -725,7 +704,7 @@
           "file_path": "D:\\DevData\\remove_bg_testset\\flatlay\\floor\\floor_pants_01.png",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 1.5885,
+          "elapsed_sec": 1.5862,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -734,19 +713,19 @@
           "analysis": {
             "width": 1024,
             "height": 558,
-            "foreground_pixels": 129673,
-            "foreground_ratio": 0.226942,
-            "avg_alpha": 44.3701,
-            "mid_alpha_ratio": 0.024635
+            "foreground_pixels": 128357,
+            "foreground_ratio": 0.224639,
+            "avg_alpha": 44.3921,
+            "mid_alpha_ratio": 0.019494
           },
-          "output_size_bytes": 1131177
+          "output_size_bytes": 1130781
         },
         {
           "file": "floor_sweater_01.png",
           "file_path": "D:\\DevData\\remove_bg_testset\\flatlay\\floor\\floor_sweater_01.png",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 1.5409,
+          "elapsed_sec": 1.5811,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -755,19 +734,19 @@
           "analysis": {
             "width": 1024,
             "height": 558,
-            "foreground_pixels": 195636,
-            "foreground_ratio": 0.342385,
-            "avg_alpha": 72.5062,
-            "mid_alpha_ratio": 0.061341
+            "foreground_pixels": 194284,
+            "foreground_ratio": 0.340019,
+            "avg_alpha": 72.5202,
+            "mid_alpha_ratio": 0.058244
           },
-          "output_size_bytes": 1201504
+          "output_size_bytes": 1201897
         },
         {
           "file": "floor_tshirt_01.png",
           "file_path": "D:\\DevData\\remove_bg_testset\\flatlay\\floor\\floor_tshirt_01.png",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 1.6292,
+          "elapsed_sec": 1.6159,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -788,7 +767,7 @@
           "file_path": "D:\\DevData\\remove_bg_testset\\flatlay\\table\\table_jeans_01.png",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 1.4325,
+          "elapsed_sec": 1.4255,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -797,19 +776,19 @@
           "analysis": {
             "width": 1024,
             "height": 558,
-            "foreground_pixels": 118453,
-            "foreground_ratio": 0.207306,
-            "avg_alpha": 40.2721,
-            "mid_alpha_ratio": 0.024722
+            "foreground_pixels": 117196,
+            "foreground_ratio": 0.205106,
+            "avg_alpha": 40.2952,
+            "mid_alpha_ratio": 0.01923
           },
-          "output_size_bytes": 1273776
+          "output_size_bytes": 1273532
         },
         {
           "file": "table_shirt_01.png",
           "file_path": "D:\\DevData\\remove_bg_testset\\flatlay\\table\\table_shirt_01.png",
           "ok": true,
           "status_code": 200,
-          "elapsed_sec": 1.6256,
+          "elapsed_sec": 1.6326,
           "params": {
             "model": "u2netp",
             "quality": "fast",
@@ -818,12 +797,12 @@
           "analysis": {
             "width": 1024,
             "height": 558,
-            "foreground_pixels": 221318,
-            "foreground_ratio": 0.387331,
-            "avg_alpha": 89.6354,
-            "mid_alpha_ratio": 0.028499
+            "foreground_pixels": 219085,
+            "foreground_ratio": 0.383423,
+            "avg_alpha": 89.6604,
+            "mid_alpha_ratio": 0.023422
           },
-          "output_size_bytes": 1076909
+          "output_size_bytes": 1077409
         }
       ],
       "subset": "flatlay"
