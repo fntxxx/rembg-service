@@ -27,5 +27,5 @@ uploads/
 .cache/
 huggingface/
 
-outputs_*
-report_*
+*outputs_*
+*report*

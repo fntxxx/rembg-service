@@ -22,10 +22,14 @@ TIMEOUT_SECONDS = 120
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 
 TEST_CONFIGS = [
-    {"name": "u2netp_fast_512", "params": {"model": "u2netp", "quality": "fast", "max_side": 512}},
-    {"name": "u2netp_fast_768", "params": {"model": "u2netp", "quality": "fast", "max_side": 768}},
-    {"name": "isnet_fast_768", "params": {"model": "isnet-general-use", "quality": "fast", "max_side": 768}},
-    {"name": "isnet_high_768", "params": {"model": "isnet-general-use", "quality": "high", "max_side": 768}},
+    {
+        "name": "isnet_fast_512",
+        "params": {
+            "model": "isnet-general-use",
+            "quality": "fast",
+            "max_side": 512,
+        },
+    },
 ]
 CONFIG_MAP = {config["name"]: config for config in TEST_CONFIGS}
 
