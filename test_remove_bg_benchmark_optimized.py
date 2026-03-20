@@ -13,6 +13,9 @@ from typing import Any
 import numpy as np
 import requests
 from PIL import Image
+from dotenv import load_dotenv
+
+load_dotenv()
 
 API_URL = os.getenv("REMOVE_BG_API_URL", "http://127.0.0.1:7860/remove-bg")
 DEFAULT_DATASET_DIR = Path(r"D:\DevData\remove_bg_testset")

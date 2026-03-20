@@ -45,92 +45,74 @@ def apply_fallback_blend(alpha: Image.Image, fallback_alpha: Image.Image) -> Ima
     return alpha
 
 
-def apply_alpha_curve(alpha: Image.Image, used_fallback: bool, foreground_ratio: float, alpha_mean: float) -> Tuple[Image.Image, Dict[str, float]]:
-    # fallback 目前停用；以下分支暫時不會進入
-    if used_fallback:
-        alpha_np = np.array(alpha, dtype=np.float32)
-        mid_alpha_ratio = float(((alpha_np >= 10) & (alpha_np <= 200)).mean())
+def apply_alpha_curve(
+    alpha: Image.Image,
+    used_fallback: bool,
+    foreground_ratio: float,
+    alpha_mean: float,
+) -> Tuple[Image.Image, Dict[str, float]]:
+    alpha_np = np.array(alpha, dtype=np.float32)
 
-        # 針對低 + 中低 alpha 做真正的收斂，避免整體發灰
-        low_mask = alpha_np < 30
-        mid_mask = (alpha_np >= 30) & (alpha_np < 80)
-        high_mask = alpha_np >= 80
+    # 記錄修正前指標
+    before_mid_alpha_ratio = float(((alpha_np >= 10) & (alpha_np <= 200)).mean())
+    before_high_alpha_ratio = float((alpha_np >= 220).mean())
 
-        # 很低 alpha：明顯收斂，避免霧狀外擴
-        alpha_np[low_mask] = np.maximum(0.0, alpha_np[low_mask] * 1.05)
+    # -------------------------------------------------
+    # 核心想法：
+    # 1. 很低 alpha 的霧邊直接收掉，避免白底稀釋
+    # 2. 中高 alpha 往上推，讓主體內部更接近實心
+    # 3. 不把全部邊界硬切成 0/255，保留少量柔邊
+    # -------------------------------------------------
 
-        # 中低 alpha：輕收斂，避免把主體整體壓太薄
-        alpha_np[mid_mask] = np.minimum(255.0, alpha_np[mid_mask] * 1.08 + 2.0)
+    # A. 很淡的外圍霧邊：直接收掉
+    very_low_mask = alpha_np < 20
+    alpha_np[very_low_mask] = 0.0
 
-        alpha_np[high_mask] = np.minimum(255.0, alpha_np[high_mask] * 1.06 + 4.0)
+    # B. 低 alpha 邊緣：大幅壓縮，縮窄 soft edge
+    low_mask = (alpha_np >= 20) & (alpha_np < 80)
+    alpha_np[low_mask] = np.maximum(0.0, (alpha_np[low_mask] - 20.0) * 0.85)
 
-        alpha_np = np.clip(alpha_np, 0, 255)
-        alpha = Image.fromarray(alpha_np.astype(np.uint8))
+    # C. 中 alpha 區：往上推，避免主體發灰
+    mid_mask = (alpha_np >= 80) & (alpha_np < 160)
+    alpha_np[mid_mask] = np.minimum(255.0, alpha_np[mid_mask] * 1.18 + 8.0)
 
-        # fallback 路徑先停用 blur，先優先解決 fade / 發灰
-        # 之後若邊界真的過硬，再回來針對特定條件加回極輕 blur
+    # D. 高 alpha 區：再推高，讓主體核心更扎實
+    high_mask = (alpha_np >= 160) & (alpha_np < 235)
+    alpha_np[high_mask] = np.minimum(255.0, alpha_np[high_mask] * 1.10 + 10.0)
 
-        debug_alpha = np.array(alpha, dtype=np.uint8)
-        debug_alpha_mean = float(debug_alpha.mean())
-        debug_foreground_ratio = float((debug_alpha >= 8).mean())
-        debug_mid_alpha_ratio = float(((debug_alpha >= 10) & (debug_alpha <= 200)).mean())
+    # E. 核心區直接接近實心
+    core_mask = alpha_np >= 235
+    alpha_np[core_mask] = 255.0
 
-        print(
-            ">>> AFTER FALLBACK CURVE <<<",
-            debug_foreground_ratio,
-            debug_alpha_mean,
-            debug_mid_alpha_ratio,
-        )
-
-        return alpha, {
-            "mid_alpha_ratio": mid_alpha_ratio,
-        }
+    alpha_np = np.clip(alpha_np, 0, 255).astype(np.uint8)
+    alpha = Image.fromarray(alpha_np)
 
     alpha_np = np.array(alpha, dtype=np.float32)
 
-    if foreground_ratio >= 0.42 and alpha_mean >= 95:
-        # 主體大且扎實：可以稍微去霧，但不要太激進
-        low_mask = alpha_np < 40
-        mid_mask = (alpha_np >= 40) & (alpha_np < 120)
-        high_mask = alpha_np >= 140
-        core_mask = alpha_np >= 180
-        high_non_core_mask = high_mask & (~core_mask)
+    # -----------------------------
+    # core boost（關鍵）
+    # -----------------------------
+    boost_core_mask = alpha_np >= 120
 
-        alpha_np[low_mask] = np.maximum(0.0, (alpha_np[low_mask] - 10.0) * 0.95)
-        alpha_np[mid_mask] = np.maximum(0.0, (alpha_np[mid_mask] - 10.0) * 1.12)
+    # 把主體往不透明推
+    alpha_np[boost_core_mask] = np.clip(
+        alpha_np[boost_core_mask] * 1.4 + 30,
+        0,
+        255
+    )
 
-        # 核心區強 boost
-        alpha_np[core_mask] = np.minimum(255.0, alpha_np[core_mask] * 1.08 + 6.0)
+    # 保證核心接近實心
+    alpha_np[alpha_np > 220] = 255
 
-        # 非核心但高 alpha，輕微 boost
-        alpha_np[high_non_core_mask] = np.minimum(255.0, alpha_np[high_non_core_mask] * 1.02)
-
-    elif foreground_ratio <= 0.20 or alpha_mean <= 50:
-        # 小主體 / 低 alpha：最保守，優先避免整體變淡
-        low_mask = alpha_np < 35
-        mid_mask = (alpha_np >= 50) & (alpha_np < 120)
-        high_mask = alpha_np >= 110
-
-        alpha_np[low_mask] = np.maximum(0.0, (alpha_np[low_mask] - 6.0) * 0.95)
-        alpha_np[mid_mask] = np.maximum(0.0, (alpha_np[mid_mask] - 6.0) * 0.98)
-        alpha_np[high_mask] = alpha_np[high_mask]
-
-    else:
-        # 中間型：輕微收斂，但保留主體厚度
-        low_mask = alpha_np < 35
-        mid_mask = (alpha_np >= 35) & (alpha_np < 115)
-        high_mask = alpha_np >= 115
-
-        alpha_np[low_mask] = np.maximum(0.0, (alpha_np[low_mask] - 8.0) * 0.93)
-        alpha_np[mid_mask] = np.maximum(0.0, (alpha_np[mid_mask] - 8.0) * 1.0)
-        alpha_np[high_mask] = np.minimum(255.0, alpha_np[high_mask] * 1.02)
-
-    alpha_np = np.clip(alpha_np, 0, 255)
     alpha = Image.fromarray(alpha_np.astype(np.uint8))
+    after_alpha_np = np.array(alpha, dtype=np.uint8)
 
-    # 非 fallback 路徑第一輪先完全停用 blur，避免把 alpha 再抹薄
-    # 先觀察 fade 指標是否明顯下降
-    return alpha, {}
+    return alpha, {
+        "before_mid_alpha_ratio": before_mid_alpha_ratio,
+        "before_high_alpha_ratio": before_high_alpha_ratio,
+        "after_mid_alpha_ratio": float(((after_alpha_np >= 10) & (after_alpha_np <= 200)).mean()),
+        "after_high_alpha_ratio": float((after_alpha_np >= 220).mean()),
+    }
 
 
 def compute_bbox_ratios(alpha: Image.Image) -> Tuple[float, float, np.ndarray]:

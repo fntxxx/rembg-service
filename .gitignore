@@ -29,3 +29,6 @@ huggingface/
 
 *outputs_*
 *report*
+
+.env
+.env.*

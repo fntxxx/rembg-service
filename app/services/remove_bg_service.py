@@ -16,6 +16,10 @@ from app.domain.alpha_pipeline import (
     # apply_fallback_blend,
     # should_use_fallback,
 )
+from app.domain.edge_decontaminate import (
+    decontaminate_edge_rgb,
+    estimate_background_rgb,
+)
 from app.domain.metrics import compute_edge_quality_metrics
 from app.domain.rejection import evaluate_rejection
 from app.schemas.responses import build_reject_payload, build_success_headers
@@ -247,7 +251,24 @@ def process_remove_bg(
         original_resized = original_full.resize(target_size, Image.LANCZOS)
         alpha = alpha.resize(target_size, Image.LANCZOS)
 
-        merged = original_resized.copy()
+        # -------------------------------------------------
+        # 邊界去污染：
+        # - 主體內部 RGB 不動
+        # - 只處理 alpha 過渡帶，降低白邊 / 灰邊
+        # -------------------------------------------------
+        original_resized_rgb = original_resized.convert("RGB")
+        bg_rgb = estimate_background_rgb(original_resized_rgb)
+
+        decontaminated_rgb = decontaminate_edge_rgb(
+            original_rgb=original_resized_rgb,
+            alpha=alpha,
+            bg_rgb=bg_rgb,
+            edge_alpha_min=20,
+            edge_alpha_max=200,
+            restore_strength=0.85,
+        )
+
+        merged = decontaminated_rgb.convert("RGBA")
         merged.putalpha(alpha)
 
         final_buf = io.BytesIO()
