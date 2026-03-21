@@ -4,7 +4,7 @@ from fastapi import APIRouter, File, Query, UploadFile
 from fastapi.responses import JSONResponse, Response
 
 from app.core.config import DEFAULT_MODEL
-from app.core.session import is_model_warmed
+from app.core.session import is_model_warmed, warmup_models
 from app.services.remove_bg_service import process_remove_bg
 
 router = APIRouter()
@@ -18,6 +18,7 @@ def root():
         "endpoints": {
             "health": "/health",
             "healthz": "/healthz",
+            "warmup": "/warmup",
             "remove_bg": "POST /remove-bg",
         },
     }
@@ -40,6 +41,18 @@ def healthz():
         "service": "rembg-service",
         "model": DEFAULT_MODEL,
         "model_warmed": is_model_warmed(DEFAULT_MODEL),
+    }
+
+
+@router.get("/warmup")
+def warmup():
+    warmup_models()
+    return {
+        "ok": True,
+        "service": "rembg-service",
+        "model": DEFAULT_MODEL,
+        "model_warmed": is_model_warmed(DEFAULT_MODEL),
+        "warmed_by": "warmup_endpoint",
     }
 
 
