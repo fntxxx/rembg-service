@@ -1,3 +1,12 @@
+---
+title: rembg-service
+emoji: 🧼
+colorFrom: blue
+colorTo: purple
+sdk: docker
+pinned: false
+---
+
 # rembg-service
 
 去背服務（Background Removal Service），基於 FastAPI + rembg，部署於 Hugging Face Spaces。
