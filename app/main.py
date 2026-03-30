@@ -1,23 +1,33 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 
 from app.api.routes import router
+from app.core.exceptions import ApiError
 from app.core.session import warmup_models
+from app.schemas.responses import (
+    build_api_error_response,
+    build_http_exception_error,
+    build_unexpected_error,
+    build_validation_error,
+)
 
 app = FastAPI(
     title="rembg-service",
     summary="去背 API，提供健康檢查、模型 warmup 與單張圖片去背處理。",
     description=(
         "此服務部署於 Hugging Face Spaces，Swagger UI 直接顯示於 `/`。"
-        "主要用途為上傳單張圖片後，回傳去背後的 PNG，或在低信心情況下回傳 JSON 拒絕結果。"
+        "主要用途為上傳單張圖片後，回傳統一 JSON contract 的去背結果或錯誤資訊。"
         "\n\n"
         "- Swagger UI：`/`\n"
         "- OpenAPI schema：`/openapi.json`\n"
         "- 檔案上傳方式：`multipart/form-data`\n"
         "- 上傳欄位名稱：`file`\n"
-        "- 成功回應：`image/png`\n"
-        "- 低信心拒絕：`422 application/json`"
+        "- 成功回應：`200 application/json`，格式為 `ok + data`\n"
+        "- 錯誤回應：`4XX/5XX application/json`，格式為 `ok + error`\n"
+        "- 固定處理策略已內建於伺服器端，不需再帶 query 參數"
     ),
-    version="1.0.0",
+    version="1.1.0",
     docs_url="/",
     redoc_url=None,
     openapi_url="/openapi.json",
@@ -28,15 +38,45 @@ app = FastAPI(
         },
         {
             "name": "background-removal",
-            "description": "圖片去背處理端點。成功時回傳 PNG，拒絕時回傳 JSON。",
+            "description": "圖片去背處理端點。成功與錯誤皆使用統一 JSON envelope。",
         },
     ],
 )
 app.include_router(router)
 
 
+@app.exception_handler(ApiError)
+async def api_error_handler(_request: Request, exc: ApiError):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=build_api_error_response(exc),
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(_request: Request, exc: RequestValidationError):
+    return JSONResponse(
+        status_code=422,
+        content=build_validation_error(exc),
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(_request: Request, exc: HTTPException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=build_http_exception_error(exc),
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(_request: Request, _exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content=build_unexpected_error(),
+    )
+
+
 @app.on_event("startup")
 def startup_event():
-    # 啟動時先完成模型預熱；如果模型壞掉或下載檔有問題，
-    # 讓服務直接啟動失敗，比啟動成功後第一筆 request 才爆更容易發現。
     warmup_models()
