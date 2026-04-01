@@ -14,6 +14,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from app.core.config import DEFAULT_MODEL, DEFAULT_REJECT_EDGE_QUALITY, DEFAULT_REJECT_LOW_CONFIDENCE, SERVICE_NAME
 from app.core.exceptions import ApiError
 import app.main as main_module
 import app.api.routes as routes_module
@@ -34,6 +35,26 @@ def test_service_info_uses_success_envelope(client):
     assert body["ok"] is True
     assert "data" in body
     assert body["data"]["processing_defaults"]["max_side"] == 512
+    assert body["data"]["service"] == SERVICE_NAME
+    assert body["data"]["model"] == DEFAULT_MODEL
+    assert body["data"]["processing_defaults"]["reject_low_confidence"] is DEFAULT_REJECT_LOW_CONFIDENCE
+    assert body["data"]["processing_defaults"]["reject_edge_quality"] is DEFAULT_REJECT_EDGE_QUALITY
+
+
+def test_health_and_healthz_share_same_contract(client):
+    health_response = client.get("/health")
+    healthz_response = client.get("/healthz")
+
+    assert health_response.status_code == 200
+    assert health_response.json() == healthz_response.json()
+    assert health_response.json() == {
+        "ok": True,
+        "data": {
+            "service": SERVICE_NAME,
+            "model": DEFAULT_MODEL,
+            "model_warmed": False,
+        },
+    }
 
 
 def test_remove_bg_success_response_returns_png_binary(client, monkeypatch):

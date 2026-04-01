@@ -6,6 +6,13 @@ from PIL import Image
 from app.domain.metrics import compute_edge_quality_metrics
 
 
+ALPHA_FOREGROUND_THRESHOLD = 8
+ALPHA_MID_MIN = 10
+ALPHA_MID_MAX = 200
+ALPHA_HIGH_THRESHOLD = 160
+ALPHA_CORE_THRESHOLD = 220
+
+
 def collect_alpha_stats(alpha: Image.Image) -> Dict[str, float]:
     alpha_data = list(alpha.getdata())
     total_pixels = len(alpha_data)
@@ -13,14 +20,18 @@ def collect_alpha_stats(alpha: Image.Image) -> Dict[str, float]:
     alpha_mean = sum(alpha_data) / total_pixels
 
     # 把很淡的半透明邊緣先排除，避免 foreground_ratio 被毛邊灌高
-    foreground_pixels = sum(1 for p in alpha_data if p >= 8)
+    foreground_pixels = sum(1 for p in alpha_data if p >= ALPHA_FOREGROUND_THRESHOLD)
     foreground_ratio = foreground_pixels / total_pixels
 
     alpha_np_base = np.array(alpha, dtype=np.float32)
 
-    mid_alpha_ratio = float(((alpha_np_base >= 10) & (alpha_np_base <= 200)).mean())
-    low_alpha_ratio = float(((alpha_np_base >= 8) & (alpha_np_base < 30)).mean())
-    high_alpha_ratio = float((alpha_np_base >= 160).mean())
+    mid_alpha_ratio = float(
+        ((alpha_np_base >= ALPHA_MID_MIN) & (alpha_np_base <= ALPHA_MID_MAX)).mean()
+    )
+    low_alpha_ratio = float(
+        ((alpha_np_base >= ALPHA_FOREGROUND_THRESHOLD) & (alpha_np_base < 30)).mean()
+    )
+    high_alpha_ratio = float((alpha_np_base >= ALPHA_HIGH_THRESHOLD).mean())
 
     edge_metrics = compute_edge_quality_metrics(alpha)
 
@@ -36,26 +47,21 @@ def collect_alpha_stats(alpha: Image.Image) -> Dict[str, float]:
     }
 
 
-def should_use_fallback(model_name: str, quality: str, foreground_ratio: float, alpha_mean: float) -> bool:
-    return False
-
-
-def apply_fallback_blend(alpha: Image.Image, fallback_alpha: Image.Image) -> Image.Image:
-    # fallback 目前停用，暫不進行 blend
-    return alpha
-
-
 def apply_alpha_curve(
     alpha: Image.Image,
     used_fallback: bool,
     foreground_ratio: float,
     alpha_mean: float,
 ) -> Tuple[Image.Image, Dict[str, float]]:
+    del used_fallback, foreground_ratio, alpha_mean
+
     alpha_np = np.array(alpha, dtype=np.float32)
 
     # 記錄修正前指標
-    before_mid_alpha_ratio = float(((alpha_np >= 10) & (alpha_np <= 200)).mean())
-    before_high_alpha_ratio = float((alpha_np >= 220).mean())
+    before_mid_alpha_ratio = float(
+        ((alpha_np >= ALPHA_MID_MIN) & (alpha_np <= ALPHA_MID_MAX)).mean()
+    )
+    before_high_alpha_ratio = float((alpha_np >= ALPHA_CORE_THRESHOLD).mean())
 
     # -------------------------------------------------
     # 核心想法：
@@ -95,14 +101,10 @@ def apply_alpha_curve(
     boost_core_mask = alpha_np >= 120
 
     # 把主體往不透明推
-    alpha_np[boost_core_mask] = np.clip(
-        alpha_np[boost_core_mask] * 1.4 + 30,
-        0,
-        255
-    )
+    alpha_np[boost_core_mask] = np.clip(alpha_np[boost_core_mask] * 1.4 + 30, 0, 255)
 
     # 保證核心接近實心
-    alpha_np[alpha_np > 220] = 255
+    alpha_np[alpha_np > ALPHA_CORE_THRESHOLD] = 255
 
     alpha = Image.fromarray(alpha_np.astype(np.uint8))
     after_alpha_np = np.array(alpha, dtype=np.uint8)
@@ -110,14 +112,16 @@ def apply_alpha_curve(
     return alpha, {
         "before_mid_alpha_ratio": before_mid_alpha_ratio,
         "before_high_alpha_ratio": before_high_alpha_ratio,
-        "after_mid_alpha_ratio": float(((after_alpha_np >= 10) & (after_alpha_np <= 200)).mean()),
-        "after_high_alpha_ratio": float((after_alpha_np >= 220).mean()),
+        "after_mid_alpha_ratio": float(
+            ((after_alpha_np >= ALPHA_MID_MIN) & (after_alpha_np <= ALPHA_MID_MAX)).mean()
+        ),
+        "after_high_alpha_ratio": float((after_alpha_np >= ALPHA_CORE_THRESHOLD).mean()),
     }
 
 
 def compute_bbox_ratios(alpha: Image.Image) -> Tuple[float, float, np.ndarray]:
     debug_alpha_np = np.array(alpha, dtype=np.float32)
-    bbox_fg = debug_alpha_np >= 8
+    bbox_fg = debug_alpha_np >= ALPHA_FOREGROUND_THRESHOLD
     ys, xs = np.where(bbox_fg)
 
     bbox_width_ratio = 0.0

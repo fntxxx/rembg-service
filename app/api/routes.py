@@ -74,6 +74,10 @@ COMMON_ERROR_RESPONSES = {
 }
 
 
+def _build_health_response():
+    return build_success_envelope(build_health_data(is_model_warmed(DEFAULT_MODEL)))
+
+
 @router.get(
     "/service-info",
     response_model=ServiceInfoResponse,
@@ -99,7 +103,7 @@ def service_info():
     responses=COMMON_ERROR_RESPONSES,
 )
 def health():
-    return build_success_envelope(build_health_data(is_model_warmed(DEFAULT_MODEL)))
+    return _build_health_response()
 
 
 @router.get(
@@ -113,7 +117,7 @@ def health():
     responses=COMMON_ERROR_RESPONSES,
 )
 def healthz():
-    return build_success_envelope(build_health_data(is_model_warmed(DEFAULT_MODEL)))
+    return _build_health_response()
 
 
 @router.get(
@@ -144,32 +148,6 @@ def warmup():
                         "format": "binary",
                     }
                 }
-            },
-            "headers": {
-                "X-RemoveBg-Model": {
-                    "description": "實際使用的模型名稱。",
-                    "schema": {"type": "string", "example": "isnet-general-use"},
-                },
-                "X-RemoveBg-Fallback-Used": {
-                    "description": "是否使用 fallback 流程。此版本預期固定為 false。",
-                    "schema": {"type": "string", "example": "false"},
-                },
-                "X-Edge-Quality-Candidate": {
-                    "description": "是否被標記為邊界品質偏低候選。",
-                    "schema": {"type": "string", "example": "false"},
-                },
-                "X-Edge-Band-Ratio": {
-                    "description": "邊界帶整體比例。",
-                    "schema": {"type": "string", "example": "0.017223"},
-                },
-                "X-Edge-Band-Mid-Ratio": {
-                    "description": "邊界帶中間透明度比例。",
-                    "schema": {"type": "string", "example": "0.009121"},
-                },
-                "X-Edge-Band-Low-Ratio": {
-                    "description": "邊界帶低透明度比例。",
-                    "schema": {"type": "string", "example": "0.004388"},
-                },
             },
         },
         502: {

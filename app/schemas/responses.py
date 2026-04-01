@@ -9,6 +9,7 @@ from app.core.config import (
     DEFAULT_QUALITY,
     DEFAULT_REJECT_EDGE_QUALITY,
     DEFAULT_REJECT_LOW_CONFIDENCE,
+    SERVICE_NAME,
 )
 from app.core.exceptions import ApiError
 
@@ -54,6 +55,18 @@ def build_success_envelope(data: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _round_metric(value: float, digits: int) -> float:
+    return round(float(value), digits)
+
+
+def _build_service_payload(**extra_fields: Any) -> Dict[str, Any]:
+    return {
+        "service": SERVICE_NAME,
+        "model": DEFAULT_MODEL,
+        **extra_fields,
+    }
+
+
 def build_reject_error_details(
     final_reject_reason: str,
     foreground_ratio: float,
@@ -68,15 +81,17 @@ def build_reject_error_details(
     return {
         "reason": final_reject_reason,
         "metrics": {
-            "foreground_ratio": round(float(foreground_ratio), 6),
-            "alpha_mean": round(float(alpha_mean), 4),
-            "mid_alpha_ratio": round(float(debug_mid_alpha_ratio), 6),
-            "high_alpha_ratio": round(float(debug_high_alpha_ratio), 6),
-            "bbox_width_ratio": round(float(bbox_width_ratio), 6),
-            "bbox_height_ratio": round(float(bbox_height_ratio), 6),
-            "edge_band_ratio": round(float(final_edge_metrics["edge_band_ratio"]), 6),
-            "edge_band_mid_ratio": round(float(final_edge_metrics["edge_band_mid_ratio"]), 6),
-            "edge_band_low_ratio": round(float(final_edge_metrics["edge_band_low_ratio"]), 6),
+            "foreground_ratio": _round_metric(foreground_ratio, 6),
+            "alpha_mean": _round_metric(alpha_mean, 4),
+            "mid_alpha_ratio": _round_metric(debug_mid_alpha_ratio, 6),
+            "high_alpha_ratio": _round_metric(debug_high_alpha_ratio, 6),
+            "bbox_width_ratio": _round_metric(bbox_width_ratio, 6),
+            "bbox_height_ratio": _round_metric(bbox_height_ratio, 6),
+            "edge_band_ratio": _round_metric(final_edge_metrics["edge_band_ratio"], 6),
+            "edge_band_mid_ratio": _round_metric(
+                final_edge_metrics["edge_band_mid_ratio"], 6
+            ),
+            "edge_band_low_ratio": _round_metric(final_edge_metrics["edge_band_low_ratio"], 6),
             "edge_quality_low_candidate": bool(edge_quality_low_candidate),
         },
     }
@@ -141,40 +156,32 @@ def build_api_error_response(exc: ApiError) -> Dict[str, Any]:
 
 
 def build_service_info_data() -> Dict[str, Any]:
-    return {
-        "service": "rembg-service",
-        "model": DEFAULT_MODEL,
-        "endpoints": {
+    return _build_service_payload(
+        endpoints={
             "service_info": "/service-info",
             "health": "/health",
             "healthz": "/healthz",
             "warmup": "/warmup",
             "remove_bg": "POST /remove-bg",
         },
-        "processing_defaults": {
+        processing_defaults={
             "max_side": DEFAULT_MAX_SIDE,
             "quality": DEFAULT_QUALITY,
             "reject_low_confidence": DEFAULT_REJECT_LOW_CONFIDENCE,
             "reject_edge_quality": DEFAULT_REJECT_EDGE_QUALITY,
         },
-    }
+    )
 
 
 def build_health_data(model_warmed: bool) -> Dict[str, Any]:
-    return {
-        "service": "rembg-service",
-        "model": DEFAULT_MODEL,
-        "model_warmed": model_warmed,
-    }
+    return _build_service_payload(model_warmed=model_warmed)
 
 
 def build_warmup_data(model_warmed: bool) -> Dict[str, Any]:
-    return {
-        "service": "rembg-service",
-        "model": DEFAULT_MODEL,
-        "model_warmed": model_warmed,
-        "warmed_by": "warmup_endpoint",
-    }
+    return _build_service_payload(
+        model_warmed=model_warmed,
+        warmed_by="warmup_endpoint",
+    )
 
 
 def raise_rejection_error(
