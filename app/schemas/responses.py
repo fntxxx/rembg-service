@@ -1,4 +1,3 @@
-import base64
 from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
@@ -83,38 +82,20 @@ def build_reject_error_details(
     }
 
 
-def build_remove_bg_success_data(
+def build_remove_bg_success_headers(
     *,
-    image_bytes: bytes,
     actual_model: str,
     fallback_used: bool,
     final_edge_candidate: bool,
     final_edge_metrics: Dict[str, float],
-    output_width: int,
-    output_height: int,
-) -> Dict[str, Any]:
+) -> Dict[str, str]:
     return {
-        "image": {
-            "filename": "removed_bg.png",
-            "mime_type": "image/png",
-            "base64": base64.b64encode(image_bytes).decode("utf-8"),
-            "width": output_width,
-            "height": output_height,
-        },
-        "model": actual_model,
-        "fallback_used": fallback_used,
-        "edge_quality_low_candidate": final_edge_candidate,
-        "metrics": {
-            "edge_band_ratio": round(float(final_edge_metrics["edge_band_ratio"]), 6),
-            "edge_band_mid_ratio": round(float(final_edge_metrics["edge_band_mid_ratio"]), 6),
-            "edge_band_low_ratio": round(float(final_edge_metrics["edge_band_low_ratio"]), 6),
-        },
-        "processing": {
-            "max_side": DEFAULT_MAX_SIDE,
-            "quality": DEFAULT_QUALITY,
-            "reject_low_confidence": DEFAULT_REJECT_LOW_CONFIDENCE,
-            "reject_edge_quality": DEFAULT_REJECT_EDGE_QUALITY,
-        },
+        "X-RemoveBg-Model": actual_model,
+        "X-RemoveBg-Fallback-Used": "true" if fallback_used else "false",
+        "X-Edge-Quality-Candidate": "true" if final_edge_candidate else "false",
+        "X-Edge-Band-Ratio": f"{float(final_edge_metrics['edge_band_ratio']):.6f}",
+        "X-Edge-Band-Mid-Ratio": f"{float(final_edge_metrics['edge_band_mid_ratio']):.6f}",
+        "X-Edge-Band-Low-Ratio": f"{float(final_edge_metrics['edge_band_low_ratio']):.6f}",
     }
 
 

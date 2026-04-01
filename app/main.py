@@ -17,17 +17,17 @@ app = FastAPI(
     summary="去背 API，提供健康檢查、模型 warmup 與單張圖片去背處理。",
     description=(
         "此服務部署於 Hugging Face Spaces，Swagger UI 直接顯示於 `/`。"
-        "主要用途為上傳單張圖片後，回傳統一 JSON contract 的去背結果或錯誤資訊。"
+        "主要用途為上傳單張圖片後，成功時直接回傳去背後的 PNG，失敗時維持統一 JSON 錯誤 contract。"
         "\n\n"
         "- Swagger UI：`/`\n"
         "- OpenAPI schema：`/openapi.json`\n"
         "- 檔案上傳方式：`multipart/form-data`\n"
         "- 上傳欄位名稱：`file`\n"
-        "- 成功回應：`200 application/json`，格式為 `ok + data`\n"
+        "- 成功回應：`200 image/png`\n"
         "- 錯誤回應：`4XX/5XX application/json`，格式為 `ok + error`\n"
         "- 固定處理策略已內建於伺服器端，不需再帶 query 參數"
     ),
-    version="1.1.0",
+    version="1.1.1",
     docs_url="/",
     redoc_url=None,
     openapi_url="/openapi.json",
@@ -38,7 +38,7 @@ app = FastAPI(
         },
         {
             "name": "background-removal",
-            "description": "圖片去背處理端點。成功與錯誤皆使用統一 JSON envelope。",
+            "description": "圖片去背處理端點。成功時回傳 PNG，失敗時使用既有 JSON 錯誤 envelope。",
         },
     ],
 )

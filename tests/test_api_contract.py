@@ -10,8 +10,6 @@ fake_rembg.remove = lambda in_bytes, session=None, **kwargs: in_bytes
 sys.modules.setdefault("rembg", fake_rembg)
 
 
-import base64
-
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -38,33 +36,20 @@ def test_service_info_uses_success_envelope(client):
     assert body["data"]["processing_defaults"]["max_side"] == 512
 
 
-def test_remove_bg_success_response_format(client, monkeypatch):
+def test_remove_bg_success_response_returns_png_binary(client, monkeypatch):
     png_bytes = b"fake-png-bytes"
-    expected_b64 = base64.b64encode(png_bytes).decode("utf-8")
 
     def fake_process_remove_bg(*, raw: bytes):
         assert raw == b"abc"
         return {
-            "image": {
-                "filename": "removed_bg.png",
-                "mime_type": "image/png",
-                "base64": expected_b64,
-                "width": 100,
-                "height": 200,
-            },
-            "model": "isnet-general-use",
-            "fallback_used": False,
-            "edge_quality_low_candidate": False,
-            "metrics": {
-                "edge_band_ratio": 0.1,
-                "edge_band_mid_ratio": 0.05,
-                "edge_band_low_ratio": 0.01,
-            },
-            "processing": {
-                "max_side": 512,
-                "quality": "fast",
-                "reject_low_confidence": True,
-                "reject_edge_quality": True,
+            "image_bytes": png_bytes,
+            "headers": {
+                "X-RemoveBg-Model": "isnet-general-use",
+                "X-RemoveBg-Fallback-Used": "false",
+                "X-Edge-Quality-Candidate": "false",
+                "X-Edge-Band-Ratio": "0.100000",
+                "X-Edge-Band-Mid-Ratio": "0.050000",
+                "X-Edge-Band-Low-Ratio": "0.010000",
             },
         }
 
@@ -76,33 +61,14 @@ def test_remove_bg_success_response_format(client, monkeypatch):
     )
 
     assert response.status_code == 200
-    body = response.json()
-    assert body == {
-        "ok": True,
-        "data": {
-            "image": {
-                "filename": "removed_bg.png",
-                "mime_type": "image/png",
-                "base64": expected_b64,
-                "width": 100,
-                "height": 200,
-            },
-            "model": "isnet-general-use",
-            "fallback_used": False,
-            "edge_quality_low_candidate": False,
-            "metrics": {
-                "edge_band_ratio": 0.1,
-                "edge_band_mid_ratio": 0.05,
-                "edge_band_low_ratio": 0.01,
-            },
-            "processing": {
-                "max_side": 512,
-                "quality": "fast",
-                "reject_low_confidence": True,
-                "reject_edge_quality": True,
-            },
-        },
-    }
+    assert response.content == png_bytes
+    assert response.headers["content-type"] == "image/png"
+    assert response.headers["x-removebg-model"] == "isnet-general-use"
+    assert response.headers["x-removebg-fallback-used"] == "false"
+    assert response.headers["x-edge-quality-candidate"] == "false"
+    assert response.headers["x-edge-band-ratio"] == "0.100000"
+    assert response.headers["x-edge-band-mid-ratio"] == "0.050000"
+    assert response.headers["x-edge-band-low-ratio"] == "0.010000"
 
 
 def test_remove_bg_business_rejection_error_format(client, monkeypatch):
@@ -216,3 +182,14 @@ def test_openapi_remove_bg_no_long_query_parameters(client):
     assert operation.get("parameters") in (None, [])
     request_body = operation["requestBody"]
     assert "multipart/form-data" in request_body["content"]
+
+
+def test_openapi_remove_bg_success_response_declares_png_binary(client):
+    schema = client.get("/openapi.json").json()
+    success_response = schema["paths"]["/remove-bg"]["post"]["responses"]["200"]
+
+    assert "image/png" in success_response["content"]
+    assert success_response["content"]["image/png"]["schema"] == {
+        "type": "string",
+        "format": "binary",
+    }

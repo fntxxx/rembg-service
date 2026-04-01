@@ -11,7 +11,7 @@ pinned: false
 
 去背服務（Background Removal Service），基於 FastAPI + rembg，部署於 Hugging Face Spaces。
 
-提供單張圖片去背 API，成功與錯誤皆採用統一 JSON contract，並將固定處理策略收斂到伺服器端。
+提供單張圖片去背 API。成功時直接回傳透明背景 PNG，失敗時維持統一 JSON error contract，並將固定處理策略收斂到伺服器端。
 
 ---
 
@@ -174,14 +174,27 @@ POST /remove-bg
 
 呼叫端不需要再傳這些 query string，Swagger UI 也不會再顯示它們。
 
-### 精簡 curl 範例
+### curl 範例
+
+將結果直接寫成 PNG 檔案：
 
 ```bash
 curl -X POST \
   'http://localhost:7860/remove-bg' \
-  -H 'accept: application/json' \
-  -H 'Content-Type: multipart/form-data' \
-  -F 'file=@dog_pet.jpg;type=image/jpeg'
+  -H 'accept: image/png' \
+  -F 'file=@dog_pet.jpg;type=image/jpeg' \
+  --output removed_bg.png
+```
+
+若只想查看回應 header：
+
+```bash
+curl -X POST \
+  'http://localhost:7860/remove-bg' \
+  -H 'accept: image/png' \
+  -F 'file=@dog_pet.jpg;type=image/jpeg' \
+  -D - \
+  --output removed_bg.png
 ```
 
 ---
@@ -189,36 +202,21 @@ curl -X POST \
 ## ✅ 成功回應
 
 - Status: `200 OK`
-- Content-Type: `application/json`
+- Content-Type: `image/png`
+- Body: 透明背景 PNG binary
 
-```json
-{
-  "ok": true,
-  "data": {
-    "image": {
-      "filename": "removed_bg.png",
-      "mime_type": "image/png",
-      "base64": "iVBORw0KGgoAAAANSUhEUgAA...",
-      "width": 768,
-      "height": 1024
-    },
-    "model": "isnet-general-use",
-    "fallback_used": false,
-    "edge_quality_low_candidate": false,
-    "metrics": {
-      "edge_band_ratio": 0.017223,
-      "edge_band_mid_ratio": 0.009121,
-      "edge_band_low_ratio": 0.004388
-    },
-    "processing": {
-      "max_side": 512,
-      "quality": "fast",
-      "reject_low_confidence": true,
-      "reject_edge_quality": true
-    }
-  }
-}
-```
+### Response Headers
+
+| Header | 說明 |
+|--------|------|
+| X-RemoveBg-Model | 實際使用模型 |
+| X-RemoveBg-Fallback-Used | 是否使用 fallback |
+| X-Edge-Quality-Candidate | 是否被標記為邊界品質偏低候選 |
+| X-Edge-Band-Ratio | 邊界帶整體比例 |
+| X-Edge-Band-Mid-Ratio | 邊界帶中間透明度比例 |
+| X-Edge-Band-Low-Ratio | 邊界帶低透明度比例 |
+
+> 成功回應不再使用 JSON 或 base64 包裝圖片內容。
 
 ---
 
@@ -325,14 +323,14 @@ curl -X POST \
 - 直接顯示 Swagger UI 可讓 API 可用性最大化
 - 不需要再額外記 `/docs`
 
-### 為什麼改成統一 JSON contract
+### 為什麼成功回應改回 PNG binary
 
 原因：
 
-- 呼叫端不需要再同時處理 binary 與多套 JSON 錯誤格式
-- Swagger UI / OpenAPI 可以完整描述 success 與 error schema
-- 成功與錯誤可用 `ok` 明確區分
-- `error.code` 與 `error.details` 可同時支援人類閱讀與機器判斷
+- 去背 API 的核心產出本來就是圖片檔，不需要再多一層 JSON/base64 包裝
+- 避免 base64 放大 payload，降低傳輸與解析成本
+- 呼叫端可直接將 response body 當成圖片檔案儲存或轉送
+- 錯誤情境仍保留既有 JSON envelope，方便機器判斷與除錯
 
 ### 為什麼固定參數要內建
 
@@ -364,7 +362,7 @@ curl -X POST \
 
 - 僅支援單張圖片
 - 圖片格式需為 Pillow 可解析格式
-- 成功回傳中的圖片內容以 base64 放在 `data.image.base64`
+- 成功回應直接是 PNG binary，不是 JSON
 - 若部署於 CPU-only 環境，目前固定使用 `fast` 品質策略
 
 ---
@@ -386,7 +384,8 @@ client = TestClient(app)
 schema = client.get('/openapi.json').json()
 remove_bg = schema['paths']['/remove-bg']['post']
 print(remove_bg.get('parameters', []))
+print(remove_bg['responses']['200']['content'].keys())
 PY
 ```
 
-預期 `/remove-bg` 的 `parameters` 為空陣列或不存在，只保留 multipart `file` 上傳欄位。
+預期 `/remove-bg` 的 `parameters` 為空陣列或不存在，成功回應內容型別應為 `image/png`。

@@ -1,4 +1,5 @@
 from fastapi import APIRouter, File, UploadFile
+from fastapi.responses import Response
 
 from app.core.config import DEFAULT_MODEL
 from app.core.session import is_model_warmed, warmup_models
@@ -6,7 +7,6 @@ from app.schemas.api_docs import (
     GenericErrorResponse,
     HealthResponse,
     RemoveBgRejectedResponse,
-    RemoveBgSuccessResponse,
     RequestValidationErrorResponse,
     ServiceInfoResponse,
     WarmupResponse,
@@ -39,11 +39,19 @@ COMMON_ERROR_RESPONSES = {
         },
     },
     422: {
-        "model": RequestValidationErrorResponse,
-        "description": "請求驗證錯誤，例如缺少 multipart file 欄位。",
+        "description": "422 可能是請求驗證錯誤，或圖片進入處理流程後因遮罩低信心 / 邊界品質不足而被拒絕。",
         "content": {
             "application/json": {
-                "example": RequestValidationErrorResponse.model_config["json_schema_extra"]["example"]
+                "examples": {
+                    "request_validation_error": {
+                        "summary": "Missing multipart file field",
+                        "value": RequestValidationErrorResponse.model_config["json_schema_extra"]["example"],
+                    },
+                    "low_confidence_mask": {
+                        "summary": "Rejected due to low confidence mask",
+                        "value": RemoveBgRejectedResponse.model_config["json_schema_extra"]["example"],
+                    },
+                }
             }
         },
     },
@@ -125,16 +133,43 @@ def warmup():
 
 @router.post(
     "/remove-bg",
-    response_model=RemoveBgSuccessResponse,
     responses={
         **COMMON_ERROR_RESPONSES,
-        422: {
-            "model": RemoveBgRejectedResponse,
-            "description": "圖片已進入處理流程，但因遮罩低信心或邊界品質不足而被拒絕。",
+        200: {
+            "description": "去背成功，直接回傳透明背景 PNG 檔案。",
             "content": {
-                "application/json": {
-                    "example": RemoveBgRejectedResponse.model_config["json_schema_extra"]["example"]
+                "image/png": {
+                    "schema": {
+                        "type": "string",
+                        "format": "binary",
+                    }
                 }
+            },
+            "headers": {
+                "X-RemoveBg-Model": {
+                    "description": "實際使用的模型名稱。",
+                    "schema": {"type": "string", "example": "isnet-general-use"},
+                },
+                "X-RemoveBg-Fallback-Used": {
+                    "description": "是否使用 fallback 流程。此版本預期固定為 false。",
+                    "schema": {"type": "string", "example": "false"},
+                },
+                "X-Edge-Quality-Candidate": {
+                    "description": "是否被標記為邊界品質偏低候選。",
+                    "schema": {"type": "string", "example": "false"},
+                },
+                "X-Edge-Band-Ratio": {
+                    "description": "邊界帶整體比例。",
+                    "schema": {"type": "string", "example": "0.017223"},
+                },
+                "X-Edge-Band-Mid-Ratio": {
+                    "description": "邊界帶中間透明度比例。",
+                    "schema": {"type": "string", "example": "0.009121"},
+                },
+                "X-Edge-Band-Low-Ratio": {
+                    "description": "邊界帶低透明度比例。",
+                    "schema": {"type": "string", "example": "0.004388"},
+                },
             },
         },
         502: {
@@ -183,11 +218,12 @@ def warmup():
         "上傳單張圖片進行去背處理。"
         "請使用 `multipart/form-data`，並以 `file` 作為欄位名稱。"
         "\n\n"
-        "成功與錯誤皆統一回傳 JSON envelope。"
+        "成功時直接回傳 `image/png`。"
+        "若遮罩信心不足或邊界品質不足，則維持 `422 application/json` 錯誤 envelope。"
         "固定處理策略已由伺服器端內建，因此呼叫端不需要再帶 `max_side`、`quality`、`model`、"
         "`reject_low_confidence`、`reject_edge_quality` 等 query 參數。"
     ),
-    response_description="統一 success envelope 的去背結果。",
+    response_description="去背成功時回傳 PNG；失敗時維持既有 JSON 錯誤格式。",
     tags=["background-removal"],
     operation_id="removeBackground",
 )
@@ -202,4 +238,9 @@ async def remove_bg(
     ),
 ):
     raw = await file.read()
-    return build_success_envelope(process_remove_bg(raw=raw))
+    result = process_remove_bg(raw=raw)
+    return Response(
+        content=result["image_bytes"],
+        media_type="image/png",
+        headers=result["headers"],
+    )

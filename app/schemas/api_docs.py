@@ -1,4 +1,4 @@
-from typing import Any, Dict, Generic, Literal, Optional, TypeVar
+from typing import Any, Generic, Literal, Optional, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -108,65 +108,7 @@ class WarmupData(HealthData):
     warmed_by: str
 
 
-class RemoveBgImageData(BaseModel):
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "filename": "removed_bg.png",
-                "mime_type": "image/png",
-                "base64": "iVBORw0KGgoAAAANSUhEUgAA...",
-                "width": 768,
-                "height": 1024,
-            }
-        }
-    )
-
-    filename: str
-    mime_type: str
-    base64: str
-    width: int
-    height: int
-
-
 class RemoveBgMetrics(BaseModel):
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "edge_band_ratio": 0.017223,
-                "edge_band_mid_ratio": 0.009121,
-                "edge_band_low_ratio": 0.004388,
-            }
-        }
-    )
-
-    edge_band_ratio: float
-    edge_band_mid_ratio: float
-    edge_band_low_ratio: float
-
-
-class RemoveBgSuccessData(BaseModel):
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "image": RemoveBgImageData.model_config["json_schema_extra"]["example"],
-                "model": "isnet-general-use",
-                "fallback_used": False,
-                "edge_quality_low_candidate": False,
-                "metrics": RemoveBgMetrics.model_config["json_schema_extra"]["example"],
-                "processing": ProcessingDefaults.model_config["json_schema_extra"]["example"],
-            }
-        }
-    )
-
-    image: RemoveBgImageData
-    model: str
-    fallback_used: bool
-    edge_quality_low_candidate: bool
-    metrics: RemoveBgMetrics
-    processing: ProcessingDefaults
-
-
-class RejectMetrics(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
@@ -201,13 +143,13 @@ class RejectDetails(BaseModel):
         json_schema_extra={
             "example": {
                 "reason": "complex_background_low_confidence",
-                "metrics": RejectMetrics.model_config["json_schema_extra"]["example"],
+                "metrics": RemoveBgMetrics.model_config["json_schema_extra"]["example"],
             }
         }
     )
 
     reason: str
-    metrics: RejectMetrics
+    metrics: RemoveBgMetrics
 
 
 class ValidationErrorItem(BaseModel):
@@ -237,7 +179,6 @@ class ValidationErrorDetails(BaseModel):
 ServiceInfoResponse = SuccessEnvelope[ServiceInfoData]
 HealthResponse = SuccessEnvelope[HealthData]
 WarmupResponse = SuccessEnvelope[WarmupData]
-RemoveBgSuccessResponse = SuccessEnvelope[RemoveBgSuccessData]
 
 
 class RejectErrorInfo(BaseModel):
@@ -263,12 +204,15 @@ class RemoveBgRejectedResponse(BaseModel):
         }
     )
 
-    ok: Literal[False]
+    ok: Literal[False] = False
     error: RejectErrorInfo
 
 
-class ValidationErrorInfo(BaseModel):
-    code: Literal["REQUEST_VALIDATION_ERROR"] = Field(..., example="REQUEST_VALIDATION_ERROR")
+class RequestValidationErrorInfo(BaseModel):
+    code: Literal["REQUEST_VALIDATION_ERROR"] = Field(
+        ...,
+        example="REQUEST_VALIDATION_ERROR",
+    )
     message: str = Field(..., example="請求參數驗證失敗。")
     details: ValidationErrorDetails
 
@@ -287,20 +231,8 @@ class RequestValidationErrorResponse(BaseModel):
         }
     )
 
-    ok: Literal[False]
-    error: ValidationErrorInfo
+    ok: Literal[False] = False
+    error: RequestValidationErrorInfo
 
 
-class GenericErrorResponse(ErrorEnvelope):
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "ok": False,
-                "error": {
-                    "code": "BAD_REQUEST",
-                    "message": "Invalid image",
-                    "details": None,
-                },
-            }
-        }
-    )
+GenericErrorResponse = ErrorEnvelope

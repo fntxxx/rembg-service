@@ -27,7 +27,7 @@ from app.domain.edge_decontaminate import (
 )
 from app.domain.rejection import evaluate_rejection
 from app.schemas.responses import (
-    build_remove_bg_success_data,
+    build_remove_bg_success_headers,
     raise_gateway_error,
     raise_rejection_error,
 )
@@ -250,12 +250,12 @@ def process_remove_bg(raw: bytes):
 
     final_edge_candidate = bool(large_garment_edge_bad or low_height_object_edge_bad)
 
-    return build_remove_bg_success_data(
-        image_bytes=final_bytes,
-        actual_model=actual_model,
-        fallback_used=timing["fallback_used"],
-        final_edge_candidate=final_edge_candidate,
-        final_edge_metrics=final_edge_metrics,
-        output_width=merged.width,
-        output_height=merged.height,
-    )
+    return {
+        "image_bytes": final_bytes,
+        "headers": build_remove_bg_success_headers(
+            actual_model=actual_model,
+            fallback_used=timing["fallback_used"],
+            final_edge_candidate=final_edge_candidate,
+            final_edge_metrics=final_edge_metrics,
+        ),
+    }
