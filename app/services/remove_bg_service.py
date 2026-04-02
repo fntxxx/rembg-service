@@ -13,7 +13,7 @@ from app.core.config import (
     DEFAULT_QUALITY,
     DEFAULT_REJECT_EDGE_QUALITY,
     DEFAULT_REJECT_LOW_CONFIDENCE,
-    MAX_OUTPUT_SIDE,
+    FINAL_OUTPUT_LONGEST_SIDE,
 )
 from app.core.session import get_session
 from app.domain.alpha_pipeline import (
@@ -106,22 +106,66 @@ def _debug_alpha_metrics(alpha_np: np.ndarray) -> tuple[float, float]:
     return mid_alpha_ratio, high_alpha_ratio
 
 
-def _resize_output_pair(original_full: Image.Image, alpha: Image.Image) -> tuple[Image.Image, Image.Image]:
-    target_size = original_full.size
-    width, height = target_size
+def _resize_original_to_alpha_size(original_full: Image.Image, alpha: Image.Image) -> tuple[Image.Image, Image.Image]:
+    target_size = alpha.size
+    if target_size[0] <= 0 or target_size[1] <= 0:
+        return original_full.copy(), alpha
+
+    if original_full.size == target_size:
+        return original_full.copy(), alpha
+
+    return original_full.resize(target_size, Image.LANCZOS), alpha
+
+
+def _compute_alpha_crop_box(alpha: Image.Image) -> tuple[int, int, int, int] | None:
+    alpha_np = np.array(alpha, dtype=np.uint8)
+    foreground_mask = alpha_np > 0
+    ys, xs = np.where(foreground_mask)
+
+    if len(xs) == 0 or len(ys) == 0:
+        return None
+
+    left = int(xs.min())
+    upper = int(ys.min())
+    right = int(xs.max()) + 1
+    lower = int(ys.max()) + 1
+
+    if right <= left or lower <= upper:
+        return None
+
+    return left, upper, right, lower
+
+
+def _crop_to_alpha_bbox(image: Image.Image, alpha: Image.Image) -> Image.Image:
+    crop_box = _compute_alpha_crop_box(alpha)
+    if crop_box is None:
+        return image
+
+    return image.crop(crop_box)
+
+
+def _resize_image_to_longest_side(image: Image.Image, target_longest_side: int) -> Image.Image:
+    if target_longest_side <= 0:
+        return image
+
+    width, height = image.size
     longest = max(width, height)
 
-    if longest > MAX_OUTPUT_SIDE:
-        scale = MAX_OUTPUT_SIDE / float(longest)
-        target_size = (int(width * scale), int(height * scale))
+    if width <= 0 or height <= 0 or longest <= 0:
+        return image
 
-    original_resized = original_full.resize(target_size, Image.LANCZOS)
-    resized_alpha = alpha.resize(target_size, Image.LANCZOS)
-    return original_resized, resized_alpha
+    if longest == target_longest_side:
+        return image
+
+    scale = target_longest_side / float(longest)
+    resized_width = max(1, int(round(width * scale)))
+    resized_height = max(1, int(round(height * scale)))
+
+    return image.resize((resized_width, resized_height), Image.LANCZOS)
 
 
 def _build_final_png(original_full: Image.Image, alpha: Image.Image) -> bytes:
-    original_resized, resized_alpha = _resize_output_pair(original_full, alpha)
+    original_resized, resized_alpha = _resize_original_to_alpha_size(original_full, alpha)
 
     original_resized_rgb = original_resized.convert("RGB")
     bg_rgb = estimate_background_rgb(original_resized_rgb)
@@ -137,6 +181,9 @@ def _build_final_png(original_full: Image.Image, alpha: Image.Image) -> bytes:
 
     merged = decontaminated_rgb.convert("RGBA")
     merged.putalpha(resized_alpha)
+
+    merged = _crop_to_alpha_bbox(merged, resized_alpha)
+    merged = _resize_image_to_longest_side(merged, FINAL_OUTPUT_LONGEST_SIDE)
 
     final_buf = io.BytesIO()
     merged.save(final_buf, format="PNG")
