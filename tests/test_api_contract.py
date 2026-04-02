@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 import sys
 import types
 
@@ -23,12 +24,17 @@ import app.api.routes as routes_module
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setattr(main_module, "warmup_models", lambda: None)
+    monkeypatch.setenv("INTERNAL_API_TOKEN", "test-token")
     with TestClient(main_module.app, raise_server_exceptions=False) as test_client:
         yield test_client
 
 
+def auth_headers(token: str = "test-token"):
+    return {"Authorization": f"Bearer {token}"}
+
+
 def test_service_info_uses_success_envelope(client):
-    response = client.get("/service-info")
+    response = client.get("/service-info", headers=auth_headers())
 
     assert response.status_code == 200
     body = response.json()
@@ -79,6 +85,7 @@ def test_remove_bg_success_response_returns_png_binary(client, monkeypatch):
     response = client.post(
         "/remove-bg",
         files={"file": ("demo.png", b"abc", "image/png")},
+        headers=auth_headers(),
     )
 
     assert response.status_code == 200
@@ -120,6 +127,7 @@ def test_remove_bg_business_rejection_error_format(client, monkeypatch):
     response = client.post(
         "/remove-bg",
         files={"file": ("demo.png", b"abc", "image/png")},
+        headers=auth_headers(),
     )
 
     assert response.status_code == 422
@@ -130,7 +138,7 @@ def test_remove_bg_business_rejection_error_format(client, monkeypatch):
 
 
 def test_remove_bg_request_validation_error_format(client):
-    response = client.post("/remove-bg")
+    response = client.post("/remove-bg", headers=auth_headers())
 
     assert response.status_code == 422
     body = response.json()
@@ -161,6 +169,7 @@ def test_remove_bg_http_error_format(client, monkeypatch):
     response = client.post(
         "/remove-bg",
         files={"file": ("demo.png", b"abc", "image/png")},
+        headers=auth_headers(),
     )
 
     assert response.status_code == 400
@@ -183,6 +192,7 @@ def test_remove_bg_unexpected_error_format(client, monkeypatch):
     response = client.post(
         "/remove-bg",
         files={"file": ("demo.png", b"abc", "image/png")},
+        headers=auth_headers(),
     )
 
     assert response.status_code == 500
@@ -194,6 +204,49 @@ def test_remove_bg_unexpected_error_format(client, monkeypatch):
             "details": None,
         },
     }
+
+
+
+def test_service_info_requires_token_when_header_is_missing(client):
+    response = client.get("/service-info")
+
+    assert response.status_code == 401
+    assert response.json() == {
+        "ok": False,
+        "error": {
+            "code": "UNAUTHORIZED",
+            "message": "缺少或無效的 API Token。",
+            "details": {"reason": "missing_authorization_header"},
+        },
+    }
+
+
+def test_service_info_requires_bearer_format(client):
+    response = client.get("/service-info", headers={"Authorization": "Token test-token"})
+
+    assert response.status_code == 401
+    assert response.json()["error"]["details"]["reason"] == "invalid_authorization_scheme"
+
+
+def test_service_info_rejects_incorrect_token(client):
+    response = client.get("/service-info", headers=auth_headers("wrong-token"))
+
+    assert response.status_code == 401
+    assert response.json()["error"]["details"]["reason"] == "invalid_api_token"
+
+
+def test_warmup_requires_correct_token(client):
+    response = client.get("/warmup", headers=auth_headers())
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+
+
+def test_openapi_remains_public_without_token(client):
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200
+    assert "/remove-bg" in response.json()["paths"]
 
 
 def test_openapi_remove_bg_no_long_query_parameters(client):

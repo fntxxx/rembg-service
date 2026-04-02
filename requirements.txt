@@ -4,3 +4,4 @@ python-multipart==0.0.9
 rembg==2.0.56
 pillow==10.2.0
 requests==2.32.5
+python-dotenv==1.2.2

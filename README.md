@@ -37,13 +37,19 @@ source .venv/Scripts/activate
 pip install -r requirements.txt
 ```
 
-### 2. 啟動服務
+### 2. 設定共用 API Token
+
+```bash
+export INTERNAL_API_TOKEN="replace-with-shared-token"
+```
+
+### 3. 啟動服務
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 7860 --reload
 ```
 
-### 3. 開啟
+### 4. 開啟
 
 - Swagger UI：http://localhost:7860/
 - Health：http://localhost:7860/healthz
@@ -54,7 +60,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 7860 --reload
 
 ```bash
 docker build -t rembg-service .
-docker run --rm -p 7860:7860 rembg-service
+docker run --rm -p 7860:7860 -e INTERNAL_API_TOKEN=replace-with-shared-token rembg-service
 ```
 
 ---
@@ -182,6 +188,7 @@ POST /remove-bg
 curl -X POST \
   'http://localhost:7860/remove-bg' \
   -H 'accept: image/png' \
+  -H 'Authorization: Bearer $INTERNAL_API_TOKEN' \
   -F 'file=@dog_pet.jpg;type=image/jpeg' \
   --output removed_bg.png
 ```
@@ -192,6 +199,7 @@ curl -X POST \
 curl -X POST \
   'http://localhost:7860/remove-bg' \
   -H 'accept: image/png' \
+  -H 'Authorization: Bearer $INTERNAL_API_TOKEN' \
   -F 'file=@dog_pet.jpg;type=image/jpeg' \
   -D - \
   --output removed_bg.png

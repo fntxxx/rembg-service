@@ -1,6 +1,7 @@
-from fastapi import APIRouter, File, UploadFile
+from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import Response
 
+from app.core.auth import require_internal_api_token
 from app.core.config import DEFAULT_MODEL
 from app.core.session import is_model_warmed, warmup_models
 from app.schemas.api_docs import (
@@ -33,6 +34,22 @@ COMMON_ERROR_RESPONSES = {
                         "code": "BAD_REQUEST",
                         "message": "Invalid image",
                         "details": None,
+                    },
+                }
+            }
+        },
+    },
+    401: {
+        "model": GenericErrorResponse,
+        "description": "缺少、格式錯誤或無效的 Bearer Token。",
+        "content": {
+            "application/json": {
+                "example": {
+                    "ok": False,
+                    "error": {
+                        "code": "UNAUTHORIZED",
+                        "message": "缺少或無效的 API Token。",
+                        "details": {"reason": "invalid_api_token"},
                     },
                 }
             }
@@ -81,6 +98,7 @@ def _build_health_response():
 @router.get(
     "/service-info",
     response_model=ServiceInfoResponse,
+    dependencies=[Depends(require_internal_api_token)],
     summary="取得服務基礎資訊",
     description="回傳服務名稱、預設模型、主要 API 路徑，以及伺服器端固定處理策略。",
     response_description="統一 success envelope 的服務資訊。",
@@ -123,6 +141,7 @@ def healthz():
 @router.get(
     "/warmup",
     response_model=WarmupResponse,
+    dependencies=[Depends(require_internal_api_token)],
     summary="執行模型 warmup",
     description="初始化預設 rembg 模型 session，讓服務在正式接收去背請求前先完成預熱。",
     response_description="統一 success envelope 的 warmup 執行結果。",
@@ -137,6 +156,7 @@ def warmup():
 
 @router.post(
     "/remove-bg",
+    dependencies=[Depends(require_internal_api_token)],
     responses={
         **COMMON_ERROR_RESPONSES,
         200: {
