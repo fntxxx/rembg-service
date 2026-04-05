@@ -166,6 +166,35 @@ POST /remove-bg
 |------|------|------|
 | file | file | 要去背的圖片 |
 
+### 圖檔白名單規則
+
+#### 允許的副檔名（必填）
+
+- `.jpg`
+- `.jpeg`
+- `.png`
+- `.webp`
+- `.avif`
+- `.heic`
+- `.heif`
+
+#### 允許的 Content-Type（request 有帶時必須符合）
+
+- `image/jpeg`
+- `image/png`
+- `image/webp`
+- `image/avif`
+- `image/heic`
+- `image/heif`
+
+#### 驗證規則
+
+- 副檔名必須在白名單內，否則直接拒絕。
+- 若 request 有帶 `content_type`，則 `content_type` 也必須在白名單內。
+- `content_type` 若缺失，前置驗證會退回只檢查副檔名。
+- `svg` / `image/svg+xml` 明確禁止，不可進入去背流程。
+- 服務不以 Pillow 是否剛好能開啟某個格式來決定是否放行。
+
 ### 固定處理策略
 
 以下策略已由伺服器端內建，不再作為公開 query 參數：
@@ -360,6 +389,7 @@ curl -X POST \
 - FastAPI
 - rembg
 - Pillow
+- pillow-heif
 - Uvicorn
 - Docker
 - Hugging Face Spaces
@@ -369,9 +399,12 @@ curl -X POST \
 ## 📌 注意事項
 
 - 僅支援單張圖片
-- 圖片格式需為 Pillow 可解析格式
+- 僅接受白名單中的點陣圖格式：`.jpg`、`.jpeg`、`.png`、`.webp`、`.avif`、`.heic`、`.heif`
+- request 若有帶 `content_type`，也必須落在白名單：`image/jpeg`、`image/png`、`image/webp`、`image/avif`、`image/heic`、`image/heif`
+- `svg` / `image/svg+xml` 明確禁止
 - 成功回應直接是 PNG binary，不是 JSON
 - 若部署於 CPU-only 環境，目前固定使用 `fast` 品質策略
+- HEIC / HEIF / AVIF 透過 `pillow-heif` 與 `register_heif_opener()` 接入 Pillow 解碼流程
 
 ---
 
@@ -380,6 +413,13 @@ curl -X POST \
 ```bash
 pytest -q
 ```
+
+建議至少確認以下情境：
+
+- `.jpg` / `.jpeg` / `.png` / `.webp` / `.avif` / `.heic` / `.heif` 可通過前置驗證
+- `.svg` 與任何不在白名單中的副檔名會被 `400` 拒絕
+- `content_type` 若有帶值但不在白名單中，會被 `400` 拒絕
+- `content_type` 若缺失，會退回只檢查副檔名
 
 若要手動驗證 OpenAPI：
 

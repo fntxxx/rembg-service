@@ -389,3 +389,28 @@ def test_file_validation_allows_missing_content_type_when_extension_is_allowed()
 @pytest.mark.parametrize("content_type", sorted(ALLOWED_IMAGE_CONTENT_TYPES))
 def test_file_validation_allows_whitelisted_content_types(content_type):
     validate_image_content_type(content_type)
+
+
+
+def test_openapi_remove_bg_description_mentions_whitelist_rules(client):
+    schema = client.get("/openapi.json").json()
+    operation = schema["paths"]["/remove-bg"]["post"]
+    description = operation["description"]
+
+    assert ".jpg" in description
+    assert ".heif" in description
+    assert "image/avif" in description
+    assert "image/svg+xml" in description
+
+
+def test_openapi_remove_bg_file_field_description_mentions_whitelist_rules(client):
+    schema = client.get("/openapi.json").json()
+    request_schema = schema["paths"]["/remove-bg"]["post"]["requestBody"]["content"]["multipart/form-data"]["schema"]
+    component_name = request_schema["$ref"].split("/")[-1]
+    file_property = schema["components"]["schemas"][component_name]["properties"]["file"]
+    description = file_property["description"]
+
+    assert ".avif" in description
+    assert ".heic" in description
+    assert "image/heif" in description
+    assert "image/svg+xml" in description

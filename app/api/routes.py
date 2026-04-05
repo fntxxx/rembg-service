@@ -219,8 +219,8 @@ def warmup():
         "\n\n"
         "成功時直接回傳 `image/png`。"
         "若遮罩信心不足或邊界品質不足，則維持 `422 application/json` 錯誤 envelope。"
-        "固定處理策略已由伺服器端內建，因此呼叫端不需要再帶 `max_side`、`quality`、`model`、"
-        "`reject_low_confidence`、`reject_edge_quality` 等 query 參數。"
+        "僅接受副檔名白名單：`.jpg`、`.jpeg`、`.png`、`.webp`、`.avif`、`.heic`、`.heif`。"
+        "request 若有帶 `content_type`，也必須落在白名單：`image/jpeg`、`image/png`、`image/webp`、`image/avif`、`image/heic`、`image/heif`。"
     ),
     response_description="去背成功時回傳 PNG；失敗時維持既有 JSON 錯誤格式。",
     tags=["background-removal"],
@@ -232,7 +232,9 @@ async def remove_bg(
         description=(
             "要進行去背的單張圖片檔案。"
             "請使用 multipart/form-data 上傳，欄位名稱必須是 `file`。"
-            "僅接受副檔名白名單與對應 content_type 白名單中的點陣圖格式。"
+            "僅接受 `.jpg`、`.jpeg`、`.png`、`.webp`、`.avif`、`.heic`、`.heif`。"
+            "若 request 有帶 `content_type`，也只接受 `image/jpeg`、`image/png`、`image/webp`、`image/avif`、`image/heic`、`image/heif`。"
+            "`svg` / `image/svg+xml` 明確禁止。"
         ),
     ),
 ):

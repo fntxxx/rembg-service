@@ -21,7 +21,7 @@ API_URL = os.getenv("REMOVE_BG_API_URL", "http://127.0.0.1:7860/remove-bg")
 DEFAULT_DATASET_DIR = Path(r"D:\DevData\remove_bg_testset")
 REPORT_FILE = "test_remove_bg_color_compare_report.json"
 TIMEOUT_SECONDS = 120
-SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
+SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".avif", ".heic", ".heif"}
 
 TEST_CONFIGS = [
     {
