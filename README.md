@@ -65,6 +65,20 @@ docker run --rm -p 7860:7860 -e INTERNAL_API_TOKEN=replace-with-shared-token rem
 
 ---
 
+
+## 🗂️ 專案結構
+
+```text
+app/
+  api/        # FastAPI 路由
+  core/       # 設定、驗證、例外與 session 管理
+  domain/     # 去背後處理與評估邏輯
+  schemas/    # API 文件與 response schema
+  services/   # 去背服務主流程
+scripts/      # 本機回歸與分析腳本（不納入 pytest）
+tests/        # 正式 API contract 測試
+```
+
 ## 📌 API 一覽
 
 ### 1. Service Info
@@ -413,6 +427,12 @@ curl -X POST \
 ```bash
 pytest -q
 ```
+
+本機分析腳本已收斂到 `scripts/`：
+
+- `python scripts/benchmark_api.py`
+- `python scripts/color_compare_local.py`
+- `python scripts/color_diff_report.py`
 
 建議至少確認以下情境：
 

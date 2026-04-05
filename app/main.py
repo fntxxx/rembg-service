@@ -1,10 +1,13 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Request
-from pillow_heif import register_heif_opener
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from pillow_heif import register_heif_opener
 
 from app.api.routes import router
 from app.core.exceptions import ApiError
+from app.core.image_policy import REMOVE_BG_RULES_DESCRIPTION
 from app.core.session import warmup_models
 from app.schemas.responses import (
     build_api_error_response,
@@ -14,6 +17,13 @@ from app.schemas.responses import (
 )
 
 register_heif_opener()
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    warmup_models()
+    yield
+
 
 app = FastAPI(
     title="rembg-service",
@@ -28,6 +38,7 @@ app = FastAPI(
         "- 上傳欄位名稱：`file`\n"
         "- 成功回應：`200 image/png`\n"
         "- 錯誤回應：`4XX/5XX application/json`，格式為 `ok + error`\n"
+        f"- {REMOVE_BG_RULES_DESCRIPTION}\n"
         "- 固定處理策略已內建於伺服器端，不需再帶 query 參數"
     ),
     version="1.1.1",
@@ -44,6 +55,7 @@ app = FastAPI(
             "description": "圖片去背處理端點。成功時回傳 PNG，失敗時使用既有 JSON 錯誤 envelope。",
         },
     ],
+    lifespan=lifespan,
 )
 app.include_router(router)
 
@@ -78,8 +90,3 @@ async def unhandled_exception_handler(_request: Request, _exc: Exception):
         status_code=500,
         content=build_unexpected_error(),
     )
-
-
-@app.on_event("startup")
-def startup_event():
-    warmup_models()

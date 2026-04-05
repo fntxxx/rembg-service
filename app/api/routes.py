@@ -4,6 +4,7 @@ from fastapi.responses import Response
 from app.core.auth import require_internal_api_token
 from app.core.config import DEFAULT_MODEL
 from app.core.file_validation import validate_upload_file_for_remove_bg
+from app.core.image_policy import REMOVE_BG_FILE_FIELD_DESCRIPTION, REMOVE_BG_RULES_DESCRIPTION
 from app.core.session import is_model_warmed, warmup_models
 from app.schemas.api_docs import (
     GenericErrorResponse,
@@ -219,8 +220,7 @@ def warmup():
         "\n\n"
         "成功時直接回傳 `image/png`。"
         "若遮罩信心不足或邊界品質不足，則維持 `422 application/json` 錯誤 envelope。"
-        "僅接受副檔名白名單：`.jpg`、`.jpeg`、`.png`、`.webp`、`.avif`、`.heic`、`.heif`。"
-        "request 若有帶 `content_type`，也必須落在白名單：`image/jpeg`、`image/png`、`image/webp`、`image/avif`、`image/heic`、`image/heif`。"
+        f"{REMOVE_BG_RULES_DESCRIPTION}"
     ),
     response_description="去背成功時回傳 PNG；失敗時維持既有 JSON 錯誤格式。",
     tags=["background-removal"],
@@ -229,13 +229,7 @@ def warmup():
 async def remove_bg(
     file: UploadFile = File(
         ...,
-        description=(
-            "要進行去背的單張圖片檔案。"
-            "請使用 multipart/form-data 上傳，欄位名稱必須是 `file`。"
-            "僅接受 `.jpg`、`.jpeg`、`.png`、`.webp`、`.avif`、`.heic`、`.heif`。"
-            "若 request 有帶 `content_type`，也只接受 `image/jpeg`、`image/png`、`image/webp`、`image/avif`、`image/heic`、`image/heif`。"
-            "`svg` / `image/svg+xml` 明確禁止。"
-        ),
+        description=REMOVE_BG_FILE_FIELD_DESCRIPTION,
     ),
 ):
     validate_upload_file_for_remove_bg(file)

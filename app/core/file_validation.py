@@ -2,24 +2,7 @@ from pathlib import Path
 
 from fastapi import HTTPException, UploadFile
 
-ALLOWED_IMAGE_EXTENSIONS = frozenset({
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".webp",
-    ".avif",
-    ".heic",
-    ".heif",
-})
-
-ALLOWED_IMAGE_CONTENT_TYPES = frozenset({
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "image/avif",
-    "image/heic",
-    "image/heif",
-})
+from app.core.image_policy import ALLOWED_IMAGE_CONTENT_TYPES, ALLOWED_IMAGE_EXTENSIONS
 
 
 def validate_image_filename(filename: str | None) -> None:

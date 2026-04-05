@@ -6,18 +6,18 @@ T = TypeVar("T")
 
 
 class SuccessEnvelope(BaseModel, Generic[T]):
-    ok: Literal[True] = Field(..., example=True)
+    ok: Literal[True] = Field(..., json_schema_extra={"example": True})
     data: T
 
 
 class ErrorInfo(BaseModel):
-    code: str = Field(..., example="BAD_REQUEST")
-    message: str = Field(..., example="Invalid image")
-    details: Optional[Any] = Field(default=None, example=None)
+    code: str = Field(..., json_schema_extra={"example": "BAD_REQUEST"})
+    message: str = Field(..., json_schema_extra={"example": "Invalid image"})
+    details: Optional[Any] = Field(default=None, json_schema_extra={"example": None})
 
 
 class ErrorEnvelope(BaseModel):
-    ok: Literal[False] = Field(..., example=False)
+    ok: Literal[False] = Field(..., json_schema_extra={"example": False})
     error: ErrorInfo
 
 
@@ -182,10 +182,10 @@ WarmupResponse = SuccessEnvelope[WarmupData]
 
 
 class RejectErrorInfo(BaseModel):
-    code: Literal["LOW_CONFIDENCE_MASK"] = Field(..., example="LOW_CONFIDENCE_MASK")
+    code: Literal["LOW_CONFIDENCE_MASK"] = Field(..., json_schema_extra={"example": "LOW_CONFIDENCE_MASK"})
     message: str = Field(
         ...,
-        example="背景過於複雜或主體邊界不清楚，建議改用純色背景重新拍攝。",
+        json_schema_extra={"example": "背景過於複雜或主體邊界不清楚，建議改用純色背景重新拍攝。"},
     )
     details: RejectDetails
 
@@ -211,9 +211,9 @@ class RemoveBgRejectedResponse(BaseModel):
 class RequestValidationErrorInfo(BaseModel):
     code: Literal["REQUEST_VALIDATION_ERROR"] = Field(
         ...,
-        example="REQUEST_VALIDATION_ERROR",
+        json_schema_extra={"example": "REQUEST_VALIDATION_ERROR"},
     )
-    message: str = Field(..., example="請求參數驗證失敗。")
+    message: str = Field(..., json_schema_extra={"example": "請求參數驗證失敗。"})
     details: ValidationErrorDetails
 
 

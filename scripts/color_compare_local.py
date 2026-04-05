@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import argparse
@@ -9,19 +8,29 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
+import sys
 from typing import Any
 
 import numpy as np
 import requests
 from PIL import Image, ImageDraw, ImageOps
+from dotenv import load_dotenv
+
+load_dotenv()
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from app.core.file_validation import ALLOWED_IMAGE_EXTENSIONS
+
 
 API_URL = os.getenv("REMOVE_BG_API_URL", "http://127.0.0.1:7860/remove-bg")
 DEFAULT_DATASET_DIR = Path(r"D:\DevData\remove_bg_testset")
-REPORT_FILE = "test_remove_bg_color_diff_report.json"
+REPORT_FILE = "test_remove_bg_color_compare_report.json"
 TIMEOUT_SECONDS = 120
-SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".avif", ".heic", ".heif"}
+SUPPORTED_EXTENSIONS = ALLOWED_IMAGE_EXTENSIONS
 
-# 預設只留目前最有 ROI 的組合，避免整批回歸被舊策略干擾
 TEST_CONFIGS = [
     {
         "name": "isnet_fast_512",
@@ -38,7 +47,9 @@ ALPHA_THRESHOLD = 8
 CORE_ALPHA_THRESHOLD = 220
 EDGE_ALPHA_MIN = 10
 EDGE_ALPHA_MAX = 200
-WASHOUT_DELTA_THRESHOLD = 12.0
+VISUAL_FADE_BG_RGB = (245, 245, 245)
+VISUAL_FADE_LIGHTNESS_SHIFT_THRESHOLD = 8.0
+VISUAL_FADE_RATIO_THRESHOLD = 0.35
 
 
 @dataclass
@@ -51,7 +62,7 @@ _resized_original_cache: dict[tuple[str, int], Image.Image] = {}
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="去背色差／coverage 問題測試腳本")
+    parser = argparse.ArgumentParser(description="本機去背原圖／去背圖色差比對腳本")
     parser.add_argument(
         "dataset_dir",
         nargs="?",
@@ -61,7 +72,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--subset",
         action="append",
-        help="只跑指定 subset，可重複傳入多次；subset 名稱為相對於 dataset_dir 的資料夾路徑",
+        help="只跑指定 subset，可重複傳入多次；名稱為相對於 dataset_dir 的資料夾路徑",
     )
     parser.add_argument(
         "--config",
@@ -87,7 +98,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--save-only-flagged",
         action="store_true",
-        help="搭配 --save-output-dir 使用，只存有問題 flag 的案例圖片",
+        help="搭配 --save-output-dir 使用，只存有色差問題 flag 的案例圖片",
     )
     parser.add_argument(
         "--top-k",
@@ -98,8 +109,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--compare-mode",
         choices=["resized", "original"],
-        default="resized",
-        help="resized: 用服務縮圖後原圖比對；original: 用原尺寸原圖縮到輸出尺寸後比對",
+        default="original",
+        help="original: 用原尺寸原圖縮到輸出尺寸後比對；resized: 用服務縮圖後原圖比對",
     )
     return parser.parse_args()
 
@@ -120,7 +131,6 @@ def iter_test_cases(dataset_dir: Path, file_filters: set[str] | None = None) -> 
 def has_supported_images(directory: Path) -> bool:
     if not directory.exists() or not directory.is_dir():
         return False
-
     for file_path in directory.iterdir():
         if file_path.is_file() and file_path.suffix.lower() in SUPPORTED_EXTENSIONS:
             return True
@@ -128,23 +138,13 @@ def has_supported_images(directory: Path) -> bool:
 
 
 def discover_subsets(dataset_dir: Path) -> list[tuple[str, Path]]:
-    """
-    自動找出所有「直接包含圖片檔」的資料夾，視為一個 subset。
-    - 若 dataset root 自己就有圖片，subset 名稱記為 "."
-    - 巢狀資料夾則用相對路徑，例如:
-      tops/shirts
-      shoes/sneakers
-    """
     subsets: list[tuple[str, Path]] = []
-
     if has_supported_images(dataset_dir):
         subsets.append((".", dataset_dir))
-
     for dir_path in sorted(p for p in dataset_dir.rglob("*") if p.is_dir()):
         if has_supported_images(dir_path):
             rel_path = dir_path.relative_to(dataset_dir).as_posix()
             subsets.append((rel_path, dir_path))
-
     return subsets
 
 
@@ -153,42 +153,17 @@ def get_mime_type(path: Path) -> str:
     return mime_type or "application/octet-stream"
 
 
-def parse_bool_header(value: str | None) -> bool | None:
-    if value is None:
-        return None
-    normalized = value.strip().lower()
-    if normalized in {"1", "true", "yes", "y", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "n", "off"}:
-        return False
-    return None
-
-
-def extract_response_meta(headers: requests.structures.CaseInsensitiveDict[str]) -> dict[str, Any]:
-    fallback_header = headers.get("X-RemoveBg-Fallback-Used")
-    model_header = headers.get("X-RemoveBg-Model")
-    return {
-        "fallback_used": parse_bool_header(fallback_header),
-        "actual_model": model_header,
-        "raw_headers": {
-            "X-RemoveBg-Fallback-Used": fallback_header,
-            "X-RemoveBg-Model": model_header,
-        },
-    }
-
-
 def call_remove_bg_api(
     session: requests.Session,
     file_path: Path,
     params: dict[str, Any],
-) -> tuple[bytes, float, int, str, dict[str, Any]]:
+) -> tuple[bytes, float, int, str]:
     with file_path.open("rb") as f:
         files = {"file": (file_path.name, f, get_mime_type(file_path))}
         started_at = time.perf_counter()
         response = session.post(API_URL, params=params, files=files, timeout=TIMEOUT_SECONDS)
         elapsed_sec = time.perf_counter() - started_at
-    response_meta = extract_response_meta(response.headers)
-    return response.content, elapsed_sec, response.status_code, response.headers.get("Content-Type", ""), response_meta
+    return response.content, elapsed_sec, response.status_code, response.headers.get("Content-Type", "")
 
 
 def resize_like_service(original: Image.Image, max_side: int) -> Image.Image:
@@ -228,7 +203,6 @@ def get_compare_image(original_path: Path, max_side: int, output_size: tuple[int
         compare_base = get_original(original_path)
     else:
         compare_base = get_resized_original(original_path, max_side)
-
     if compare_base.size != output_size:
         compare_base = compare_base.resize(output_size, Image.LANCZOS)
     return compare_base
@@ -250,7 +224,7 @@ def rgb_to_lab(rgb: np.ndarray) -> np.ndarray:
     z = r * 0.0193339 + g * 0.1191920 + b * 0.9503041
 
     x /= 0.95047
-    y /= 1.00000
+    y /= 1.0
     z /= 1.08883
 
     epsilon = 216 / 24389
@@ -275,6 +249,14 @@ def delta_e76(rgb_a: np.ndarray, rgb_b: np.ndarray) -> np.ndarray:
     return np.sqrt(np.sum((lab_a - lab_b) ** 2, axis=1))
 
 
+def composite_rgba_on_bg(rgba: np.ndarray, bg_rgb: tuple[int, int, int]) -> np.ndarray:
+    rgb = rgba[:, :, :3].astype(np.float32)
+    alpha = rgba[:, :, 3:4].astype(np.float32) / 255.0
+    bg = np.array(bg_rgb, dtype=np.float32).reshape(1, 1, 3)
+    composite = rgb * alpha + bg * (1.0 - alpha)
+    return np.clip(composite, 0.0, 255.0).astype(np.float32)
+
+
 def summarize_mask_metrics(orig_rgb: np.ndarray, out_rgb: np.ndarray, mask: np.ndarray) -> dict[str, Any] | None:
     count = int(mask.sum())
     if count == 0:
@@ -285,9 +267,6 @@ def summarize_mask_metrics(orig_rgb: np.ndarray, out_rgb: np.ndarray, mask: np.n
     diff = out_pixels - orig_pixels
     abs_diff = np.abs(diff)
     delta_e = delta_e76(orig_pixels, out_pixels)
-
-    lightness_shift = float(np.mean(out_pixels.mean(axis=1) - orig_pixels.mean(axis=1)))
-    washout_ratio = float(np.mean((out_pixels.mean(axis=1) - orig_pixels.mean(axis=1)) >= WASHOUT_DELTA_THRESHOLD))
 
     return {
         "pixels": count,
@@ -300,94 +279,43 @@ def summarize_mask_metrics(orig_rgb: np.ndarray, out_rgb: np.ndarray, mask: np.n
         },
         "mean_delta_e": round(float(delta_e.mean()), 4),
         "p95_delta_e": round(float(np.percentile(delta_e, 95)), 4),
-        "mean_lightness_shift": round(lightness_shift, 4),
-        "washout_ratio": round(washout_ratio, 6),
+        "mean_lightness_shift": round(float(np.mean(out_pixels.mean(axis=1) - orig_pixels.mean(axis=1))), 4),
     }
 
 
-def compute_bbox_metrics(mask: np.ndarray) -> dict[str, Any]:
-    h, w = mask.shape
-    fg_pixels = int(mask.sum())
-    total = int(h * w)
-    if fg_pixels == 0:
-        return {
-            "bbox": None,
-            "bbox_width_ratio": 0.0,
-            "bbox_height_ratio": 0.0,
-            "left_half_fg_ratio": 0.0,
-            "right_half_fg_ratio": 0.0,
-            "top_half_fg_ratio": 0.0,
-            "bottom_half_fg_ratio": 0.0,
-            "left_right_relative_drop": 0.0,
-            "top_bottom_relative_drop": 0.0,
-        }
+def summarize_visual_fade_metrics(
+    compare_rgba: np.ndarray,
+    output_rgba: np.ndarray,
+    mask: np.ndarray,
+    bg_rgb: tuple[int, int, int],
+) -> dict[str, Any] | None:
+    count = int(mask.sum())
+    if count == 0:
+        return None
 
-    ys, xs = np.where(mask)
-    x0 = int(xs.min())
-    x1 = int(xs.max())
-    y0 = int(ys.min())
-    y1 = int(ys.max())
+    compare_composite = composite_rgba_on_bg(compare_rgba, bg_rgb)
+    output_composite = composite_rgba_on_bg(output_rgba, bg_rgb)
 
-    mid_x = w // 2
-    mid_y = h // 2
-    left_pixels = int(mask[:, :mid_x].sum())
-    right_pixels = int(mask[:, mid_x:].sum())
-    top_pixels = int(mask[:mid_y, :].sum())
-    bottom_pixels = int(mask[mid_y:, :].sum())
-
-    left_ratio = left_pixels / total if total else 0.0
-    right_ratio = right_pixels / total if total else 0.0
-    top_ratio = top_pixels / total if total else 0.0
-    bottom_ratio = bottom_pixels / total if total else 0.0
+    orig_pixels = compare_composite[mask].astype(np.float32)
+    out_pixels = output_composite[mask].astype(np.float32)
+    lightness_shift = out_pixels.mean(axis=1) - orig_pixels.mean(axis=1)
+    delta_e = delta_e76(orig_pixels, out_pixels)
 
     return {
-        "bbox": {"x0": x0, "y0": y0, "x1": x1, "y1": y1},
-        "bbox_width_ratio": round((x1 - x0 + 1) / w, 6) if w else 0.0,
-        "bbox_height_ratio": round((y1 - y0 + 1) / h, 6) if h else 0.0,
-        "left_half_fg_ratio": round(left_ratio, 6),
-        "right_half_fg_ratio": round(right_ratio, 6),
-        "top_half_fg_ratio": round(top_ratio, 6),
-        "bottom_half_fg_ratio": round(bottom_ratio, 6),
-        "left_right_relative_drop": round(abs(left_ratio - right_ratio) / max(left_ratio + right_ratio, 1e-6), 6),
-        "top_bottom_relative_drop": round(abs(top_ratio - bottom_ratio) / max(top_ratio + bottom_ratio, 1e-6), 6),
+        "pixels": count,
+        "bg_rgb": list(bg_rgb),
+        "mean_lightness_shift": round(float(lightness_shift.mean()), 4),
+        "max_lightness_shift": round(float(lightness_shift.max()), 4),
+        "fade_ratio": round(float(np.mean(lightness_shift >= VISUAL_FADE_LIGHTNESS_SHIFT_THRESHOLD)), 6),
+        "mean_delta_e": round(float(delta_e.mean()), 4),
+        "p95_delta_e": round(float(np.percentile(delta_e, 95)), 4),
     }
 
 
-def compute_balance_flags(coverage: dict[str, Any]) -> dict[str, bool]:
-    left = coverage["left_half_fg_ratio"]
-    right = coverage["right_half_fg_ratio"]
-    top = coverage["top_half_fg_ratio"]
-    bottom = coverage["bottom_half_fg_ratio"]
-
-    left_right_drop = abs(left - right)
-    top_bottom_drop = abs(top - bottom)
-
-    return {
-        "possible_left_right_imbalance": left_right_drop >= 0.08,
-        "possible_top_bottom_imbalance": top_bottom_drop >= 0.12,
-        "possible_left_right_relative_imbalance": coverage["left_right_relative_drop"] >= 0.35,
-        "possible_top_bottom_relative_imbalance": coverage["top_bottom_relative_drop"] >= 0.35,
-        "possible_narrow_mask": coverage["bbox_width_ratio"] <= 0.2,
-        "possible_short_mask": coverage["bbox_height_ratio"] <= 0.2,
-    }
-
-
-def draw_bbox_overlay(image: Image.Image, bbox: dict[str, int] | None, color: tuple[int, int, int, int], width: int = 3) -> None:
-    if not bbox:
-        return
-    draw = ImageDraw.Draw(image)
-    for offset in range(width):
-        draw.rectangle(
-            [bbox["x0"] - offset, bbox["y0"] - offset, bbox["x1"] + offset, bbox["y1"] + offset],
-            outline=color,
-        )
-
-
-def build_preview_image(compare_img: Image.Image, output: Image.Image, alpha: np.ndarray, bbox: dict[str, int] | None) -> Image.Image:
+def build_preview_image(compare_img: Image.Image, output: Image.Image, alpha: np.ndarray) -> Image.Image:
     compare_rgba = compare_img.convert("RGBA")
     output_rgba = output.convert("RGBA")
 
-    white_bg = Image.new("RGBA", output_rgba.size, (255, 255, 255, 255))
     checker = Image.new("RGBA", output_rgba.size, (255, 255, 255, 255))
     draw = ImageDraw.Draw(checker)
     step = 24
@@ -396,16 +324,14 @@ def build_preview_image(compare_img: Image.Image, output: Image.Image, alpha: np
             if ((x // step) + (y // step)) % 2 == 0:
                 draw.rectangle([x, y, x + step - 1, y + step - 1], fill=(230, 230, 230, 255))
 
-    composed = Image.alpha_composite(checker, output_rgba)
+    white_bg = Image.new("RGBA", output_rgba.size, (255, 255, 255, 255))
+    output_checker = Image.alpha_composite(checker, output_rgba)
+    output_white = Image.alpha_composite(white_bg, output_rgba)
     alpha_img = Image.fromarray(alpha.astype(np.uint8), mode="L")
     alpha_rgb = ImageOps.colorize(alpha_img, black="black", white="white").convert("RGBA")
 
-    # 在 compare 與 alpha panel 上畫 bbox，人工檢查 coverage 更直觀
-    draw_bbox_overlay(compare_rgba, bbox, (255, 0, 0, 255), width=2)
-    draw_bbox_overlay(alpha_rgb, bbox, (255, 0, 0, 255), width=2)
-
-    panels = [compare_rgba, composed, Image.alpha_composite(white_bg, output_rgba), alpha_rgb]
-    labels = ["compare_bbox", "output_checker", "output_white", "alpha_bbox"]
+    panels = [compare_rgba, output_checker, output_white, alpha_rgb]
+    labels = ["original_compare", "output_checker", "output_white", "alpha"]
 
     width, height = compare_rgba.size
     header_h = 28
@@ -431,7 +357,6 @@ def analyze_output(
     compare_mode: str,
 ) -> tuple[dict[str, Any], Image.Image, Image.Image, np.ndarray]:
     output = Image.open(io.BytesIO(output_bytes)).convert("RGBA")
-    original_img = get_original(original_path)
     compare_img = get_compare_image(original_path, max_side=max_side, output_size=output.size, compare_mode=compare_mode)
 
     compare_np = np.array(compare_img, dtype=np.uint8)
@@ -445,53 +370,38 @@ def analyze_output(
     total_pixels = int(alpha.shape[0] * alpha.shape[1])
     fg_pixels = int(fg_mask.sum())
     fg_ratio = fg_pixels / total_pixels if total_pixels else 0.0
-
-    alpha_flat = alpha.flatten()
-    mid_alpha_pixels = int(np.sum((alpha_flat >= EDGE_ALPHA_MIN) & (alpha_flat <= EDGE_ALPHA_MAX)))
-    mid_alpha_ratio = mid_alpha_pixels / total_pixels if total_pixels else 0.0
+    mid_alpha_ratio = float(np.mean(edge_mask)) if total_pixels else 0.0
 
     compare_rgb = compare_np[:, :, :3]
     out_rgb = out_np[:, :, :3]
 
-    overall_metrics = summarize_mask_metrics(compare_rgb, out_rgb, fg_mask)
-    core_metrics = summarize_mask_metrics(compare_rgb, out_rgb, core_mask)
-    edge_metrics = summarize_mask_metrics(compare_rgb, out_rgb, edge_mask)
-    coverage = compute_bbox_metrics(fg_mask)
-    balance_flags = compute_balance_flags(coverage)
+    overall = summarize_mask_metrics(compare_rgb, out_rgb, fg_mask)
+    core = summarize_mask_metrics(compare_rgb, out_rgb, core_mask)
+    edge = summarize_mask_metrics(compare_rgb, out_rgb, edge_mask)
+    visual_fade = summarize_visual_fade_metrics(compare_np, out_np, fg_mask, bg_rgb=VISUAL_FADE_BG_RGB)
 
-    orig_w, orig_h = original_img.size
-    out_w, out_h = output.size
-    width_scale_ratio = out_w / orig_w if orig_w else 0.0
-    height_scale_ratio = out_h / orig_h if orig_h else 0.0
-    output_scale_ratio = max(width_scale_ratio, height_scale_ratio)
+    flags = {
+        "possible_empty_mask": fg_ratio < 0.01,
+        "possible_tiny_mask": fg_ratio < 0.05,
+        "possible_over_soft_edge": mid_alpha_ratio > 0.12,
+        "possible_core_color_shift": (core or {}).get("mean_delta_e", 0) >= 6.0,
+        "possible_visual_fade": (visual_fade or {}).get("mean_lightness_shift", 0) >= VISUAL_FADE_LIGHTNESS_SHIFT_THRESHOLD,
+        "possible_alpha_fade": (visual_fade or {}).get("fade_ratio", 0) >= VISUAL_FADE_RATIO_THRESHOLD,
+    }
 
     analysis = {
         "compare_mode": compare_mode,
         "width": int(output.width),
         "height": int(output.height),
-        "original_width": int(orig_w),
-        "original_height": int(orig_h),
-        "output_width": int(out_w),
-        "output_height": int(out_h),
-        "width_scale_ratio": round(width_scale_ratio, 6),
-        "height_scale_ratio": round(height_scale_ratio, 6),
-        "output_scale_ratio": round(output_scale_ratio, 6),
         "foreground_pixels": fg_pixels,
         "foreground_ratio": round(fg_ratio, 6),
         "avg_alpha": round(float(alpha.mean()), 4),
-        "mid_alpha_ratio": round(float(mid_alpha_ratio), 6),
-        "overall": overall_metrics,
-        "core": core_metrics,
-        "edge": edge_metrics,
-        "coverage": coverage,
-        "flags": {
-            "possible_empty_mask": fg_ratio < 0.01,
-            "possible_tiny_mask": fg_ratio < 0.05,
-            "possible_over_soft_edge": mid_alpha_ratio > 0.12,
-            "possible_core_color_shift": (core_metrics or {}).get("mean_delta_e", 0) >= 6.0,
-            "possible_edge_washout": (edge_metrics or {}).get("washout_ratio", 0) >= 0.2,
-            **balance_flags,
-        },
+        "mid_alpha_ratio": round(mid_alpha_ratio, 6),
+        "overall": overall,
+        "core": core,
+        "edge": edge,
+        "visual_fade": visual_fade,
+        "flags": flags,
     }
     return analysis, compare_img, output, alpha
 
@@ -504,204 +414,68 @@ def has_any_problem_flag(flags: dict[str, Any]) -> bool:
     return any(bool(v) for v in flags.values())
 
 
-def count_problem_flags(flags: dict[str, Any]) -> int:
-    return sum(1 for v in flags.values() if bool(v))
-
-
-def apply_response_meta_flags(item: dict[str, Any]) -> None:
-    if not item.get("ok"):
-        return
-    analysis = item.get("analysis") or {}
-    flags = analysis.get("flags")
-    if not isinstance(flags, dict):
-        return
-    response_meta = item.get("response_meta") or {}
-    flags["missing_fallback_header"] = response_meta.get("fallback_used") is None
-    flags["missing_actual_model_header"] = not response_meta.get("actual_model")
-
-
-def build_fallback_readable_summary(summary: dict[str, Any], subset_name: str, config_name: str) -> dict[str, Any]:
-    return {
-        "subset": subset_name,
-        "config": config_name,
-        "header_available_count": summary.get("fallback_header_available_count"),
-        "fallback_used_count": summary.get("fallback_used_count"),
-        "fallback_used_rate": summary.get("fallback_used_rate"),
-        "missing_fallback_header_count": summary.get("missing_fallback_header_count"),
-        "missing_actual_model_header_count": summary.get("missing_actual_model_header_count"),
-    }
-
-
 def compact_item(item: dict[str, Any]) -> dict[str, Any]:
     analysis = item["analysis"]
-    coverage = analysis["coverage"]
-    response_meta = item.get("response_meta") or {}
     return {
         "file": item["file"],
         "elapsed_sec": item["elapsed_sec"],
         "foreground_ratio": analysis["foreground_ratio"],
-        "core_mean_delta_e": (analysis.get("core") or {}).get("mean_delta_e"),
-        "edge_washout_ratio": (analysis.get("edge") or {}).get("washout_ratio"),
-        "original_width": analysis["original_width"],
-        "original_height": analysis["original_height"],
-        "output_width": analysis["output_width"],
-        "output_height": analysis["output_height"],
-        "output_scale_ratio": analysis["output_scale_ratio"],
-        "bbox_width_ratio": coverage["bbox_width_ratio"],
-        "bbox_height_ratio": coverage["bbox_height_ratio"],
-        "left_half_fg_ratio": coverage["left_half_fg_ratio"],
-        "right_half_fg_ratio": coverage["right_half_fg_ratio"],
-        "left_right_relative_drop": coverage["left_right_relative_drop"],
-        "top_half_fg_ratio": coverage["top_half_fg_ratio"],
-        "bottom_half_fg_ratio": coverage["bottom_half_fg_ratio"],
-        "top_bottom_relative_drop": coverage["top_bottom_relative_drop"],
+        "avg_alpha": analysis["avg_alpha"],
         "mid_alpha_ratio": analysis["mid_alpha_ratio"],
-        "fallback_used": response_meta.get("fallback_used"),
-        "actual_model": response_meta.get("actual_model"),
-        "missing_fallback_header": analysis["flags"].get("missing_fallback_header"),
-        "missing_actual_model_header": analysis["flags"].get("missing_actual_model_header"),
-        "problem_flag_count": count_problem_flags(analysis["flags"]),
+        "overall_mean_delta_e": (analysis.get("overall") or {}).get("mean_delta_e"),
+        "core_mean_delta_e": (analysis.get("core") or {}).get("mean_delta_e"),
+        "edge_mean_delta_e": (analysis.get("edge") or {}).get("mean_delta_e"),
+        "visual_fade_lightness_shift": (analysis.get("visual_fade") or {}).get("mean_lightness_shift"),
+        "visual_fade_ratio": (analysis.get("visual_fade") or {}).get("fade_ratio"),
         "flags": analysis["flags"],
         "saved_output_png": item.get("saved_output_png"),
         "saved_preview_png": item.get("saved_preview_png"),
     }
 
 
-def classify_review_case(item: dict[str, Any], elapsed_threshold: float) -> set[str]:
-    analysis = item["analysis"]
-    flags = analysis["flags"]
-    response_meta = item.get("response_meta") or {}
-
-    kinds: set[str] = set()
-    if response_meta.get("fallback_used") is True:
-        kinds.add("fallback")
-    if flags.get("possible_core_color_shift") or flags.get("possible_edge_washout"):
-        kinds.add("color_shift")
-    if (
-        flags.get("possible_left_right_imbalance")
-        or flags.get("possible_top_bottom_imbalance")
-        or flags.get("possible_left_right_relative_imbalance")
-        or flags.get("possible_top_bottom_relative_imbalance")
-        or flags.get("possible_narrow_mask")
-        or flags.get("possible_short_mask")
-        or flags.get("possible_empty_mask")
-        or flags.get("possible_tiny_mask")
-    ):
-        kinds.add("imbalance")
-    if item["elapsed_sec"] >= elapsed_threshold:
-        kinds.add("slow")
-    if flags.get("missing_fallback_header") or flags.get("missing_actual_model_header"):
-        kinds.add("missing_header")
-    if not kinds:
-        kinds.add("other")
-    return kinds
-
-
-def pick_diverse_review_cases(success_items: list[dict[str, Any]], top_k: int) -> list[dict[str, Any]]:
-    if not success_items or top_k <= 0:
-        return []
-
-    elapsed_threshold = float(np.percentile([x["elapsed_sec"] for x in success_items], 90))
-    review_candidates = [
-        x for x in success_items
-        if (x.get("response_meta") or {}).get("fallback_used") is True
-        or has_any_problem_flag(x["analysis"]["flags"])
-        or x["elapsed_sec"] >= elapsed_threshold
-    ]
-
-    def rank_key(x: dict[str, Any]) -> tuple[Any, ...]:
-        return (
-            1 if (x.get("response_meta") or {}).get("fallback_used") is True else 0,
-            count_problem_flags(x["analysis"]["flags"]),
-            (x["analysis"].get("core") or {}).get("mean_delta_e", 0),
-            (x["analysis"].get("edge") or {}).get("washout_ratio", 0),
-            x["elapsed_sec"],
-        )
-
-    sorted_candidates = sorted(review_candidates, key=rank_key, reverse=True)
-
-    # 類型配額：至少讓 fallback / color_shift / imbalance / slow 各有機會進榜
-    quotas = ["fallback", "color_shift", "imbalance", "slow"]
-    chosen: list[dict[str, Any]] = []
-    chosen_files: set[str] = set()
-
-    for quota_name in quotas:
-        for item in sorted_candidates:
-            if item["file"] in chosen_files:
-                continue
-            kinds = classify_review_case(item, elapsed_threshold)
-            if quota_name in kinds:
-                chosen.append(item)
-                chosen_files.add(item["file"])
-                break
-
-    for item in sorted_candidates:
-        if len(chosen) >= top_k:
-            break
-        if item["file"] in chosen_files:
-            continue
-        chosen.append(item)
-        chosen_files.add(item["file"])
-
-    return chosen[:top_k]
-
-
-def summarize_items(items: list[dict[str, Any]], top_k: int, subset_name: str, config_name: str) -> dict[str, Any]:
+def summarize_items(items: list[dict[str, Any]], top_k: int) -> dict[str, Any]:
     success_items = [x for x in items if x["ok"]]
     failed_items = [x for x in items if not x["ok"]]
-
     elapsed_list = [x["elapsed_sec"] for x in items]
-    fg_ratio_list = [x["analysis"]["foreground_ratio"] for x in success_items if x.get("analysis")]
+
+    overall_de_list = [
+        x["analysis"]["overall"]["mean_delta_e"]
+        for x in success_items
+        if x.get("analysis", {}).get("overall")
+    ]
     core_de_list = [
         x["analysis"]["core"]["mean_delta_e"]
         for x in success_items
         if x.get("analysis", {}).get("core")
     ]
-    edge_washout_list = [
-        x["analysis"]["edge"]["washout_ratio"]
+    edge_de_list = [
+        x["analysis"]["edge"]["mean_delta_e"]
         for x in success_items
         if x.get("analysis", {}).get("edge")
     ]
+    visual_fade_shift_list = [
+        x["analysis"]["visual_fade"]["mean_lightness_shift"]
+        for x in success_items
+        if x.get("analysis", {}).get("visual_fade")
+    ]
+    flagged_count = sum(1 for x in success_items if has_any_problem_flag(x["analysis"]["flags"]))
 
     worst_core = sorted(
         [x for x in success_items if x.get("analysis", {}).get("core")],
         key=lambda x: x["analysis"]["core"]["mean_delta_e"],
         reverse=True,
     )[:top_k]
-    worst_edge = sorted(
-        [x for x in success_items if x.get("analysis", {}).get("edge")],
-        key=lambda x: x["analysis"]["edge"]["washout_ratio"],
+    worst_visual_fade = sorted(
+        [x for x in success_items if x.get("analysis", {}).get("visual_fade")],
+        key=lambda x: (
+            x["analysis"]["visual_fade"]["mean_lightness_shift"],
+            x["analysis"]["visual_fade"]["fade_ratio"],
+        ),
         reverse=True,
     )[:top_k]
-    worst_imbalance = sorted(
-        success_items,
-        key=lambda x: x["analysis"]["coverage"]["left_right_relative_drop"],
-        reverse=True,
-    )[:top_k]
-    worst_top_bottom = sorted(
-        success_items,
-        key=lambda x: x["analysis"]["coverage"]["top_bottom_relative_drop"],
-        reverse=True,
-    )[:top_k]
-    worst_elapsed = sorted(
-        success_items,
-        key=lambda x: x["elapsed_sec"],
-        reverse=True,
-    )[:top_k]
+    worst_elapsed = sorted(success_items, key=lambda x: x["elapsed_sec"], reverse=True)[:top_k]
 
-    fallback_known_items = [x for x in success_items if (x.get("response_meta") or {}).get("fallback_used") is not None]
-    fallback_used_count = sum(1 for x in fallback_known_items if (x.get("response_meta") or {}).get("fallback_used") is True)
-    flagged_count = sum(1 for x in success_items if has_any_problem_flag(x["analysis"]["flags"]))
-    missing_fallback_header_count = sum(
-        1 for x in success_items if x["analysis"]["flags"].get("missing_fallback_header")
-    )
-    missing_actual_model_header_count = sum(
-        1 for x in success_items if x["analysis"]["flags"].get("missing_actual_model_header")
-    )
-
-    recommended_review = pick_diverse_review_cases(success_items, top_k=top_k)
-
-    summary = {
+    return {
         "total": len(items),
         "success": len(success_items),
         "failed": len(failed_items),
@@ -709,23 +483,14 @@ def summarize_items(items: list[dict[str, Any]], top_k: int, subset_name: str, c
         "avg_elapsed_sec": round(safe_ratio(sum(elapsed_list), len(elapsed_list)), 4),
         "max_elapsed_sec": round(max(elapsed_list), 4) if elapsed_list else 0.0,
         "min_elapsed_sec": round(min(elapsed_list), 4) if elapsed_list else 0.0,
-        "avg_foreground_ratio": round(safe_ratio(sum(fg_ratio_list), len(fg_ratio_list)), 6) if fg_ratio_list else None,
+        "avg_overall_mean_delta_e": round(safe_ratio(sum(overall_de_list), len(overall_de_list)), 4) if overall_de_list else None,
         "avg_core_mean_delta_e": round(safe_ratio(sum(core_de_list), len(core_de_list)), 4) if core_de_list else None,
-        "avg_edge_washout_ratio": round(safe_ratio(sum(edge_washout_list), len(edge_washout_list)), 6) if edge_washout_list else None,
-        "fallback_header_available_count": len(fallback_known_items),
-        "fallback_used_count": fallback_used_count,
-        "fallback_used_rate": round(safe_ratio(fallback_used_count, len(fallback_known_items)), 6) if fallback_known_items else None,
-        "missing_fallback_header_count": missing_fallback_header_count,
-        "missing_actual_model_header_count": missing_actual_model_header_count,
+        "avg_edge_mean_delta_e": round(safe_ratio(sum(edge_de_list), len(edge_de_list)), 4) if edge_de_list else None,
+        "avg_visual_fade_lightness_shift": round(safe_ratio(sum(visual_fade_shift_list), len(visual_fade_shift_list)), 4) if visual_fade_shift_list else None,
         "worst_core_color_shift": [compact_item(x) for x in worst_core],
-        "worst_edge_washout": [compact_item(x) for x in worst_edge],
-        "worst_left_right_imbalance": [compact_item(x) for x in worst_imbalance],
-        "worst_top_bottom_imbalance": [compact_item(x) for x in worst_top_bottom],
+        "worst_visual_fade": [compact_item(x) for x in worst_visual_fade],
         "worst_elapsed_cases": [compact_item(x) for x in worst_elapsed],
-        "recommended_review_cases": [compact_item(x) for x in recommended_review],
     }
-    summary["fallback_readable_summary"] = build_fallback_readable_summary(summary, subset_name, config_name)
-    return summary
 
 
 def save_artifacts(
@@ -753,27 +518,7 @@ def should_save_artifacts(item: dict[str, Any], save_only_flagged: bool) -> bool
         return True
     if not item.get("ok"):
         return False
-    analysis = item.get("analysis") or {}
-    flags = analysis.get("flags") or {}
-    response_meta = item.get("response_meta") or {}
-    if response_meta.get("fallback_used") is True:
-        return True
-    tracked_flags = {
-        "possible_empty_mask",
-        "possible_tiny_mask",
-        "possible_over_soft_edge",
-        "possible_core_color_shift",
-        "possible_edge_washout",
-        "possible_left_right_imbalance",
-        "possible_top_bottom_imbalance",
-        "possible_left_right_relative_imbalance",
-        "possible_top_bottom_relative_imbalance",
-        "possible_narrow_mask",
-        "possible_short_mask",
-        "missing_fallback_header",
-        "missing_actual_model_header",
-    }
-    return any(bool(flags.get(name)) for name in tracked_flags)
+    return has_any_problem_flag((item.get("analysis") or {}).get("flags") or {})
 
 
 def run_one_config(
@@ -801,7 +546,7 @@ def run_one_config(
     for index, case in enumerate(cases, start=1):
         print(f"[{index}/{len(cases)}] 測試中：{case.file_path.name}")
         try:
-            output_bytes, elapsed_sec, status_code, content_type, response_meta = call_remove_bg_api(session, case.file_path, params)
+            output_bytes, elapsed_sec, status_code, content_type = call_remove_bg_api(session, case.file_path, params)
             if status_code != 200:
                 item = {
                     "file": case.file_path.name,
@@ -810,7 +555,6 @@ def run_one_config(
                     "status_code": status_code,
                     "content_type": content_type,
                     "elapsed_sec": round(elapsed_sec, 4),
-                    "response_meta": response_meta,
                     "error": output_bytes.decode("utf-8", errors="ignore"),
                 }
                 print(f"  [FAIL] status={status_code}, elapsed={elapsed_sec:.4f}s")
@@ -821,7 +565,7 @@ def run_one_config(
                     max_side=params["max_side"],
                     compare_mode=compare_mode,
                 )
-                preview = build_preview_image(compare_img, output_img, alpha, analysis["coverage"]["bbox"])
+                preview = build_preview_image(compare_img, output_img, alpha)
                 item = {
                     "file": case.file_path.name,
                     "file_path": str(case.file_path),
@@ -831,10 +575,8 @@ def run_one_config(
                     "elapsed_sec": round(elapsed_sec, 4),
                     "params": params,
                     "analysis": analysis,
-                    "response_meta": response_meta,
                     "output_size_bytes": len(output_bytes),
                 }
-                apply_response_meta_flags(item)
                 if save_output_dir is not None and should_save_artifacts(item, save_only_flagged):
                     saved_output_png, saved_preview_png = save_artifacts(
                         save_output_dir, subset_name, config_name, case, output_bytes, preview
@@ -842,15 +584,14 @@ def run_one_config(
                     item["saved_output_png"] = saved_output_png
                     item["saved_preview_png"] = saved_preview_png
 
-                coverage = analysis["coverage"]
-                core_de = (analysis.get("core") or {}).get("mean_delta_e")
-                problem_flag_count = count_problem_flags(analysis["flags"])
                 print(
-                    f"  [PASS] elapsed={elapsed_sec:.4f}s, fg_ratio={analysis['foreground_ratio']}, "
-                    f"core_delta_e={core_de}, left_fg={coverage['left_half_fg_ratio']}, "
-                    f"right_fg={coverage['right_half_fg_ratio']}, lr_rel={coverage['left_right_relative_drop']}, "
-                    f"mid_alpha={analysis['mid_alpha_ratio']}, problem_flags={problem_flag_count}, "
-                    f"fallback={response_meta.get('fallback_used')}, actual_model={response_meta.get('actual_model')}"
+                    f"  [PASS] elapsed={elapsed_sec:.4f}s, "
+                    f"overall_delta_e={(analysis.get('overall') or {}).get('mean_delta_e')}, "
+                    f"core_delta_e={(analysis.get('core') or {}).get('mean_delta_e')}, "
+                    f"edge_delta_e={(analysis.get('edge') or {}).get('mean_delta_e')}, "
+                    f"visual_fade_shift={(analysis.get('visual_fade') or {}).get('mean_lightness_shift')}, "
+                    f"visual_fade_ratio={(analysis.get('visual_fade') or {}).get('fade_ratio')}, "
+                    f"mid_alpha={analysis['mid_alpha_ratio']}"
                 )
         except requests.RequestException as e:
             item = {
@@ -875,7 +616,7 @@ def run_one_config(
 
         items.append(item)
 
-    summary = summarize_items(items, top_k=top_k, subset_name=subset_name, config_name=config_name)
+    summary = summarize_items(items, top_k=top_k)
     print("\n--- Summary ---")
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 
@@ -889,40 +630,17 @@ def run_one_config(
 
 def build_subsets(dataset_dir: Path, subset_filters: set[str] | None) -> list[tuple[str, Path]]:
     all_subsets = discover_subsets(dataset_dir)
-
     if not subset_filters:
         return all_subsets
-
     normalized_filters = {s.replace("\\", "/").strip() for s in subset_filters}
     return [(name, path) for name, path in all_subsets if name in normalized_filters]
-
-
-def build_fallback_overview(config_reports: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
-    for report in config_reports:
-        summary = report.get("summary") or {}
-        rows.append(
-            {
-                "subset": report.get("subset"),
-                "config": report.get("config_name"),
-                "success": summary.get("success"),
-                "fallback_header_available_count": summary.get("fallback_header_available_count"),
-                "fallback_used_count": summary.get("fallback_used_count"),
-                "fallback_used_rate": summary.get("fallback_used_rate"),
-                "missing_fallback_header_count": summary.get("missing_fallback_header_count"),
-                "missing_actual_model_header_count": summary.get("missing_actual_model_header_count"),
-                "avg_elapsed_sec": summary.get("avg_elapsed_sec"),
-                "max_elapsed_sec": summary.get("max_elapsed_sec"),
-            }
-        )
-    return rows
 
 
 def get_next_version(base_dir: Path, base_name: str) -> int:
     version = 1
     while True:
-        report_candidate = base_dir / f"{base_name}_report_v{version}.json"
-        output_candidate = base_dir / f"{base_name}_outputs_v{version}"
+        report_candidate = base_dir / f"{base_name}_color_compare_report_v{version}.json"
+        output_candidate = base_dir / f"{base_name}_color_compare_outputs_v{version}"
         if not report_candidate.exists() and not output_candidate.exists():
             return version
         version += 1
@@ -946,7 +664,7 @@ def main() -> int:
     if args.save_output_dir:
         save_output_dir = Path(args.save_output_dir).resolve()
     else:
-        save_output_dir = Path.cwd() / f"{dataset_name}_outputs_v{auto_version}"
+        save_output_dir = Path.cwd() / f"{dataset_name}_color_compare_outputs_v{auto_version}"
 
     total_cases = 0
     subset_cases_map: dict[str, list[TestCase]] = {}
@@ -960,7 +678,7 @@ def main() -> int:
         return 1
 
     print("=" * 80)
-    print("去背色差／coverage 問題測試")
+    print("本機去背色差比對測試")
     print(f"API_URL      : {API_URL}")
     print(f"DATASET_DIR  : {dataset_dir}")
     print(f"TOTAL_CASES  : {total_cases}")
@@ -969,7 +687,7 @@ def main() -> int:
     print(f"CONFIGS      : {', '.join(config['name'] for config in selected_configs)}")
     print(f"COMPARE_MODE : {args.compare_mode}")
     print(f"FILE_FILTERS : {', '.join(sorted(file_filters)) if file_filters else '(none)'}")
-    print(f"SAVE_DIR     : {save_output_dir if save_output_dir else '(none)'}")
+    print(f"SAVE_DIR     : {save_output_dir}")
     print(f"SAVE_FLAGGED : {args.save_only_flagged}")
     print("=" * 80)
 
@@ -1010,14 +728,13 @@ def main() -> int:
             "file": sorted(file_filters) if file_filters else None,
         },
         "compare_mode": args.compare_mode,
-        "save_output_dir": str(save_output_dir) if save_output_dir else None,
+        "save_output_dir": str(save_output_dir),
         "save_only_flagged": args.save_only_flagged,
-        "fallback_used_rate_by_subset_config": build_fallback_overview(config_reports),
         "configs": config_reports,
     }
 
     if args.report_file == REPORT_FILE:
-        report_path = Path.cwd() / f"{dataset_name}_report_v{auto_version}.json"
+        report_path = Path.cwd() / f"{dataset_name}_color_compare_report_v{auto_version}.json"
     else:
         report_path = Path(args.report_file).resolve()
 

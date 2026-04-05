@@ -21,11 +21,12 @@ from fastapi.testclient import TestClient
 
 from app.core.config import DEFAULT_MODEL, DEFAULT_REJECT_EDGE_QUALITY, DEFAULT_REJECT_LOW_CONFIDENCE, SERVICE_NAME
 from app.core.exceptions import ApiError
-from app.core.file_validation import (
+from app.core.file_validation import validate_image_content_type, validate_image_filename
+from app.core.image_policy import (
     ALLOWED_IMAGE_CONTENT_TYPES,
     ALLOWED_IMAGE_EXTENSIONS,
-    validate_image_content_type,
-    validate_image_filename,
+    REMOVE_BG_FILE_FIELD_DESCRIPTION,
+    REMOVE_BG_RULES_DESCRIPTION,
 )
 import app.main as main_module
 import app.api.routes as routes_module
@@ -414,3 +415,14 @@ def test_openapi_remove_bg_file_field_description_mentions_whitelist_rules(clien
     assert ".heic" in description
     assert "image/heif" in description
     assert "image/svg+xml" in description
+
+
+def test_openapi_remove_bg_descriptions_use_shared_policy_text(client):
+    schema = client.get("/openapi.json").json()
+    remove_bg = schema["paths"]["/remove-bg"]["post"]
+    multipart_schema = remove_bg["requestBody"]["content"]["multipart/form-data"]["schema"]
+    schema_ref = multipart_schema["$ref"].split("/")[-1]
+    file_property = schema["components"]["schemas"][schema_ref]["properties"]["file"]
+
+    assert REMOVE_BG_RULES_DESCRIPTION in remove_bg["description"]
+    assert file_property["description"] == REMOVE_BG_FILE_FIELD_DESCRIPTION

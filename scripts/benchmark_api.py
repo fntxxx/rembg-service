@@ -8,6 +8,7 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
+import sys
 from typing import Any
 
 import numpy as np
@@ -17,12 +18,19 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from app.core.file_validation import ALLOWED_IMAGE_EXTENSIONS
+
+
 API_URL = os.getenv("REMOVE_BG_API_URL", "http://127.0.0.1:7860/remove-bg")
 DEFAULT_DATASET_DIR = Path(r"D:\DevData\remove_bg_testset")
 REPORT_FILE = "test_remove_bg_benchmark_report.json"
 TIMEOUT_SECONDS = 120
 
-SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".avif", ".heic", ".heif"}
+SUPPORTED_EXTENSIONS = ALLOWED_IMAGE_EXTENSIONS
 
 TEST_CONFIGS = [
     {
