@@ -3,6 +3,7 @@ from fastapi.responses import Response
 
 from app.core.auth import require_internal_api_token
 from app.core.config import DEFAULT_MODEL
+from app.core.file_validation import validate_upload_file_for_remove_bg
 from app.core.session import is_model_warmed, warmup_models
 from app.schemas.api_docs import (
     GenericErrorResponse,
@@ -231,10 +232,11 @@ async def remove_bg(
         description=(
             "要進行去背的單張圖片檔案。"
             "請使用 multipart/form-data 上傳，欄位名稱必須是 `file`。"
-            "支援的實際格式依 Pillow 可讀取格式為準。"
+            "僅接受副檔名白名單與對應 content_type 白名單中的點陣圖格式。"
         ),
     ),
 ):
+    validate_upload_file_for_remove_bg(file)
     raw = await file.read()
     result = process_remove_bg(raw=raw)
     return Response(

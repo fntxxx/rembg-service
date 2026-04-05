@@ -10,6 +10,10 @@ fake_rembg.new_session = lambda model_name: {"model": model_name}
 fake_rembg.remove = lambda in_bytes, session=None, **kwargs: in_bytes
 sys.modules.setdefault("rembg", fake_rembg)
 
+fake_pillow_heif = types.ModuleType("pillow_heif")
+fake_pillow_heif.register_heif_opener = lambda *args, **kwargs: None
+sys.modules.setdefault("pillow_heif", fake_pillow_heif)
+
 
 import pytest
 from fastapi import HTTPException
@@ -17,6 +21,12 @@ from fastapi.testclient import TestClient
 
 from app.core.config import DEFAULT_MODEL, DEFAULT_REJECT_EDGE_QUALITY, DEFAULT_REJECT_LOW_CONFIDENCE, SERVICE_NAME
 from app.core.exceptions import ApiError
+from app.core.file_validation import (
+    ALLOWED_IMAGE_CONTENT_TYPES,
+    ALLOWED_IMAGE_EXTENSIONS,
+    validate_image_content_type,
+    validate_image_filename,
+)
 import app.main as main_module
 import app.api.routes as routes_module
 
@@ -267,3 +277,115 @@ def test_openapi_remove_bg_success_response_declares_png_binary(client):
         "type": "string",
         "format": "binary",
     }
+
+@pytest.mark.parametrize(
+    ("filename", "content_type"),
+    [
+        ("demo.jpg", "image/jpeg"),
+        ("demo.jpeg", "image/jpeg"),
+        ("demo.png", "image/png"),
+        ("demo.webp", "image/webp"),
+        ("demo.avif", "image/avif"),
+        ("demo.heic", "image/heic"),
+        ("demo.heif", "image/heif"),
+    ],
+)
+def test_remove_bg_allowed_extension_and_content_type_can_pass(client, monkeypatch, filename, content_type):
+    monkeypatch.setattr(
+        routes_module,
+        "process_remove_bg",
+        lambda *, raw: {
+            "image_bytes": b"ok",
+            "headers": {
+                "X-RemoveBg-Model": "isnet-general-use",
+                "X-RemoveBg-Fallback-Used": "false",
+                "X-Edge-Quality-Candidate": "false",
+                "X-Edge-Band-Ratio": "0.100000",
+                "X-Edge-Band-Mid-Ratio": "0.050000",
+                "X-Edge-Band-Low-Ratio": "0.010000",
+            },
+        },
+    )
+
+    response = client.post(
+        "/remove-bg",
+        files={"file": (filename, b"abc", content_type)},
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"ok"
+
+
+def test_remove_bg_rejects_svg(client, monkeypatch):
+    called = {"value": False}
+
+    def fake_process_remove_bg(*, raw: bytes):
+        called["value"] = True
+        return {"image_bytes": raw, "headers": {}}
+
+    monkeypatch.setattr(routes_module, "process_remove_bg", fake_process_remove_bg)
+
+    response = client.post(
+        "/remove-bg",
+        files={"file": ("demo.svg", b"<svg/>", "image/svg+xml")},
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["message"] == "Invalid image"
+    assert called["value"] is False
+
+
+def test_remove_bg_rejects_disallowed_extension(client, monkeypatch):
+    called = {"value": False}
+
+    def fake_process_remove_bg(*, raw: bytes):
+        called["value"] = True
+        return {"image_bytes": raw, "headers": {}}
+
+    monkeypatch.setattr(routes_module, "process_remove_bg", fake_process_remove_bg)
+
+    response = client.post(
+        "/remove-bg",
+        files={"file": ("demo.gif", b"gif89a", "image/gif")},
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["message"] == "Invalid image"
+    assert called["value"] is False
+
+
+def test_remove_bg_rejects_disallowed_content_type(client, monkeypatch):
+    called = {"value": False}
+
+    def fake_process_remove_bg(*, raw: bytes):
+        called["value"] = True
+        return {"image_bytes": raw, "headers": {}}
+
+    monkeypatch.setattr(routes_module, "process_remove_bg", fake_process_remove_bg)
+
+    response = client.post(
+        "/remove-bg",
+        files={"file": ("demo.png", b"abc", "application/octet-stream")},
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 400
+    assert response.json()["error"]["message"] == "Invalid image"
+    assert called["value"] is False
+
+
+def test_file_validation_allows_missing_content_type_when_extension_is_allowed():
+    for extension in ALLOWED_IMAGE_EXTENSIONS:
+        validate_image_filename(f"demo{extension}")
+
+    validate_image_content_type(None)
+    validate_image_content_type("")
+    validate_image_content_type("   ")
+
+
+@pytest.mark.parametrize("content_type", sorted(ALLOWED_IMAGE_CONTENT_TYPES))
+def test_file_validation_allows_whitelisted_content_types(content_type):
+    validate_image_content_type(content_type)

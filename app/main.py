@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request
+from pillow_heif import register_heif_opener
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
@@ -11,6 +12,8 @@ from app.schemas.responses import (
     build_unexpected_error,
     build_validation_error,
 )
+
+register_heif_opener()
 
 app = FastAPI(
     title="rembg-service",
