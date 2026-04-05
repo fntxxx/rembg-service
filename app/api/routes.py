@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi.responses import Response
 
 from app.core.auth import require_internal_api_token
+from app.core.error_codes import ErrorCode
 from app.core.config import DEFAULT_MODEL
 from app.core.file_validation import validate_upload_file_for_remove_bg
 from app.core.image_policy import REMOVE_BG_FILE_FIELD_DESCRIPTION, REMOVE_BG_RULES_DESCRIPTION
@@ -33,7 +34,7 @@ COMMON_ERROR_RESPONSES = {
                 "example": {
                     "ok": False,
                     "error": {
-                        "code": "BAD_REQUEST",
+                        "code": ErrorCode.EMPTY_FILE,
                         "message": "Empty file",
                         "details": None,
                     },
@@ -87,7 +88,7 @@ COMMON_ERROR_RESPONSES = {
                         "value": {
                             "ok": False,
                             "error": {
-                                "code": "UNPROCESSABLE_ENTITY",
+                                "code": ErrorCode.INVALID_IMAGE,
                                 "message": "Invalid image",
                                 "details": None,
                             },
@@ -109,7 +110,7 @@ COMMON_ERROR_RESPONSES = {
                 "example": {
                     "ok": False,
                     "error": {
-                        "code": "INTERNAL_SERVER_ERROR",
+                        "code": ErrorCode.SERVER_MISCONFIGURATION,
                         "message": "服務發生未預期錯誤。",
                         "details": None,
                     },
@@ -210,7 +211,7 @@ def warmup():
                             "value": {
                                 "ok": False,
                                 "error": {
-                                    "code": "REMBG_EXECUTION_FAILED",
+                                    "code": ErrorCode.REMBG_EXECUTION_FAILED,
                                     "message": "去背引擎執行失敗。",
                                     "details": {
                                         "cause": "session initialization failed",
@@ -225,7 +226,7 @@ def warmup():
                             "value": {
                                 "ok": False,
                                 "error": {
-                                    "code": "POSTPROCESS_FAILED",
+                                    "code": ErrorCode.POSTPROCESS_FAILED,
                                     "message": "去背後處理失敗。",
                                     "details": {
                                         "cause": "cannot merge alpha",

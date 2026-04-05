@@ -2,6 +2,7 @@ from pathlib import Path
 
 from fastapi import UploadFile
 
+from app.core.error_codes import ErrorCode
 from app.core.exceptions import ApiError
 from app.core.image_policy import (
     ALLOWED_IMAGE_CONTENT_TYPES,
@@ -14,7 +15,7 @@ from app.core.image_policy import (
 def _raise_unsupported_media_type() -> None:
     raise ApiError(
         status_code=415,
-        code="UNSUPPORTED_MEDIA_TYPE",
+        code=ErrorCode.UNSUPPORTED_MEDIA_TYPE,
         message="Unsupported media type",
         details=None,
     )

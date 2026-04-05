@@ -347,13 +347,13 @@ curl -X POST \
 }
 ```
 
-### 400 一般請求錯誤（例如空檔案）
+### 400 一般請求錯誤（空檔案）
 
 ```json
 {
   "ok": false,
   "error": {
-    "code": "BAD_REQUEST",
+    "code": "EMPTY_FILE",
     "message": "Empty file",
     "details": null
   }
@@ -378,6 +378,19 @@ curl -X POST \
 ```
 
 ---
+
+
+### 穩定錯誤碼 contract
+
+- `400 EMPTY_FILE`：上傳檔案為空
+- `401 UNAUTHORIZED`：缺少或無效的 Bearer Token
+- `415 UNSUPPORTED_MEDIA_TYPE`：副檔名或 `content_type` 不在白名單內，或為 SVG
+- `422 INVALID_IMAGE`：副檔名與 `content_type` 合法，但圖片內容無法被 Pillow 解碼
+- `422 LOW_CONFIDENCE_MASK`：去背後主體遮罩信心不足或邊界品質不足
+- `500 SERVER_MISCONFIGURATION`：伺服器端設定錯誤，例如模型名稱或必要 token 未正確配置
+- `500 INTERNAL_SERVER_ERROR`：未分類的伺服器內部錯誤
+- `502 REMBG_EXECUTION_FAILED`：底層去背引擎失敗
+- `502 POSTPROCESS_FAILED`：去背後處理失敗
 
 ## 🧠 設計說明
 

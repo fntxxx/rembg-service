@@ -2,6 +2,7 @@ from fastapi import Depends, Header
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.core.config import get_internal_api_token
+from app.core.error_codes import ErrorCode
 from app.core.exceptions import ApiError
 
 
@@ -16,7 +17,7 @@ def require_internal_api_token(
     if not configured_token:
         raise ApiError(
             status_code=500,
-            code="INTERNAL_SERVER_ERROR",
+            code=ErrorCode.SERVER_MISCONFIGURATION,
             message="服務發生未預期錯誤。",
             details={"reason": "internal_api_token_not_configured"},
         )
@@ -24,7 +25,7 @@ def require_internal_api_token(
     if raw_authorization is None:
         raise ApiError(
             status_code=401,
-            code="UNAUTHORIZED",
+            code=ErrorCode.UNAUTHORIZED,
             message="缺少或無效的 API Token。",
             details={"reason": "missing_authorization_header"},
         )
@@ -32,7 +33,7 @@ def require_internal_api_token(
     if credentials is None:
         raise ApiError(
             status_code=401,
-            code="UNAUTHORIZED",
+            code=ErrorCode.UNAUTHORIZED,
             message="缺少或無效的 API Token。",
             details={"reason": "invalid_authorization_scheme"},
         )
@@ -41,7 +42,7 @@ def require_internal_api_token(
     if not provided_token or provided_token != configured_token:
         raise ApiError(
             status_code=401,
-            code="UNAUTHORIZED",
+            code=ErrorCode.UNAUTHORIZED,
             message="缺少或無效的 API Token。",
             details={"reason": "invalid_api_token"},
         )

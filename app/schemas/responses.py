@@ -11,24 +11,25 @@ from app.core.config import (
     DEFAULT_REJECT_LOW_CONFIDENCE,
     SERVICE_NAME,
 )
+from app.core.error_codes import ErrorCode
 from app.core.exceptions import ApiError
 
 
 _STATUS_CODE_TO_ERROR_CODE = {
-    400: "BAD_REQUEST",
-    401: "UNAUTHORIZED",
-    403: "FORBIDDEN",
-    404: "NOT_FOUND",
-    405: "METHOD_NOT_ALLOWED",
-    409: "CONFLICT",
-    413: "PAYLOAD_TOO_LARGE",
-    415: "UNSUPPORTED_MEDIA_TYPE",
-    422: "UNPROCESSABLE_ENTITY",
-    429: "TOO_MANY_REQUESTS",
-    500: "INTERNAL_SERVER_ERROR",
-    502: "BAD_GATEWAY",
-    503: "SERVICE_UNAVAILABLE",
-    504: "GATEWAY_TIMEOUT",
+    400: ErrorCode.BAD_REQUEST,
+    401: ErrorCode.UNAUTHORIZED,
+    403: ErrorCode.FORBIDDEN,
+    404: ErrorCode.NOT_FOUND,
+    405: ErrorCode.METHOD_NOT_ALLOWED,
+    409: ErrorCode.CONFLICT,
+    413: ErrorCode.PAYLOAD_TOO_LARGE,
+    415: ErrorCode.UNSUPPORTED_MEDIA_TYPE,
+    422: ErrorCode.UNPROCESSABLE_ENTITY,
+    429: ErrorCode.TOO_MANY_REQUESTS,
+    500: ErrorCode.INTERNAL_SERVER_ERROR,
+    502: ErrorCode.BAD_GATEWAY,
+    503: ErrorCode.SERVICE_UNAVAILABLE,
+    504: ErrorCode.GATEWAY_TIMEOUT,
 }
 
 
@@ -117,7 +118,7 @@ def build_remove_bg_success_headers(
 def build_http_exception_error(exc: HTTPException) -> Dict[str, Any]:
     details = exc.detail if isinstance(exc.detail, (dict, list)) else None
     message = exc.detail if isinstance(exc.detail, str) else "Request failed"
-    code = _STATUS_CODE_TO_ERROR_CODE.get(exc.status_code, "HTTP_ERROR")
+    code = _STATUS_CODE_TO_ERROR_CODE.get(exc.status_code, ErrorCode.HTTP_ERROR)
     return build_error_envelope(code=code, message=message, details=details)
 
 
@@ -133,7 +134,7 @@ def build_validation_error(exc: RequestValidationError) -> Dict[str, Any]:
         )
 
     return build_error_envelope(
-        code="REQUEST_VALIDATION_ERROR",
+        code=ErrorCode.REQUEST_VALIDATION_ERROR,
         message="請求參數驗證失敗。",
         details={"errors": sanitized_errors},
     )
@@ -141,7 +142,7 @@ def build_validation_error(exc: RequestValidationError) -> Dict[str, Any]:
 
 def build_unexpected_error() -> Dict[str, Any]:
     return build_error_envelope(
-        code="INTERNAL_SERVER_ERROR",
+        code=ErrorCode.INTERNAL_SERVER_ERROR,
         message="服務發生未預期錯誤。",
         details=None,
     )
@@ -198,7 +199,7 @@ def raise_rejection_error(
 ) -> None:
     raise ApiError(
         status_code=422,
-        code="LOW_CONFIDENCE_MASK",
+        code=ErrorCode.LOW_CONFIDENCE_MASK,
         message="背景過於複雜或主體邊界不清楚，建議改用純色背景重新拍攝。",
         details=build_reject_error_details(
             final_reject_reason=final_reject_reason,

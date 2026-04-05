@@ -20,6 +20,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.core.config import DEFAULT_MODEL, DEFAULT_REJECT_EDGE_QUALITY, DEFAULT_REJECT_LOW_CONFIDENCE, SERVICE_NAME
+from app.core.error_codes import ErrorCode
 from app.core.exceptions import ApiError
 from app.core.file_validation import validate_image_content_type, validate_image_filename
 from app.core.image_policy import (
@@ -210,7 +211,7 @@ def test_remove_bg_unexpected_error_format(client, monkeypatch):
     assert response.json() == {
         "ok": False,
         "error": {
-            "code": "INTERNAL_SERVER_ERROR",
+            "code": ErrorCode.INTERNAL_SERVER_ERROR,
             "message": "服務發生未預期錯誤。",
             "details": None,
         },
@@ -334,7 +335,7 @@ def test_remove_bg_rejects_svg(client, monkeypatch):
     )
 
     assert response.status_code == 415
-    assert response.json()["error"]["code"] == "UNSUPPORTED_MEDIA_TYPE"
+    assert response.json()["error"]["code"] == ErrorCode.UNSUPPORTED_MEDIA_TYPE
     assert response.json()["error"]["message"] == "Unsupported media type"
     assert called["value"] is False
 
@@ -355,7 +356,7 @@ def test_remove_bg_rejects_disallowed_extension(client, monkeypatch):
     )
 
     assert response.status_code == 415
-    assert response.json()["error"]["code"] == "UNSUPPORTED_MEDIA_TYPE"
+    assert response.json()["error"]["code"] == ErrorCode.UNSUPPORTED_MEDIA_TYPE
     assert response.json()["error"]["message"] == "Unsupported media type"
     assert called["value"] is False
 
@@ -376,7 +377,7 @@ def test_remove_bg_rejects_disallowed_content_type(client, monkeypatch):
     )
 
     assert response.status_code == 415
-    assert response.json()["error"]["code"] == "UNSUPPORTED_MEDIA_TYPE"
+    assert response.json()["error"]["code"] == ErrorCode.UNSUPPORTED_MEDIA_TYPE
     assert response.json()["error"]["message"] == "Unsupported media type"
     assert called["value"] is False
 
@@ -409,7 +410,7 @@ def test_remove_bg_invalid_image_payload_returns_422(client):
     assert response.json() == {
         "ok": False,
         "error": {
-            "code": "UNPROCESSABLE_ENTITY",
+            "code": ErrorCode.INVALID_IMAGE,
             "message": "Invalid image",
             "details": None,
         },
@@ -422,7 +423,7 @@ def test_service_info_returns_500_when_internal_token_not_configured(client, mon
     response = client.get("/service-info")
 
     assert response.status_code == 500
-    assert response.json()["error"]["code"] == "INTERNAL_SERVER_ERROR"
+    assert response.json()["error"]["code"] == ErrorCode.SERVER_MISCONFIGURATION
     assert response.json()["error"]["details"]["reason"] == "internal_api_token_not_configured"
 
 
@@ -440,7 +441,7 @@ def test_remove_bg_returns_500_when_model_configuration_is_invalid(client, monke
     assert response.json() == {
         "ok": False,
         "error": {
-            "code": "INTERNAL_SERVER_ERROR",
+            "code": ErrorCode.SERVER_MISCONFIGURATION,
             "message": "服務發生未預期錯誤。",
             "details": {
                 "reason": "unsupported_model",
@@ -491,4 +492,4 @@ def test_openapi_remove_bg_declares_415_and_422_errors(client):
     assert "415" in responses
     assert "422" in responses
     assert "Unsupported media type" in str(responses["415"])
-    assert "Invalid image" in str(responses["422"])
+    assert "INVALID_IMAGE" in str(responses["422"])

@@ -14,6 +14,7 @@ from app.core.config import (
     DEFAULT_REJECT_LOW_CONFIDENCE,
     FINAL_OUTPUT_LONGEST_SIDE,
 )
+from app.core.error_codes import ErrorCode
 from app.core.exceptions import ApiError
 from app.core.session import get_session
 from app.domain.alpha_pipeline import (
@@ -84,7 +85,7 @@ def _load_and_prepare_input(raw: bytes, max_side: int) -> tuple[Image.Image, byt
     if not raw:
         raise ApiError(
             status_code=400,
-            code="BAD_REQUEST",
+            code=ErrorCode.EMPTY_FILE,
             message="Empty file",
             details=None,
         )
@@ -104,7 +105,7 @@ def _load_and_prepare_input(raw: bytes, max_side: int) -> tuple[Image.Image, byt
     except Exception as exc:
         raise ApiError(
             status_code=422,
-            code="UNPROCESSABLE_ENTITY",
+            code=ErrorCode.INVALID_IMAGE,
             message="Invalid image",
             details=None,
         ) from exc
@@ -306,7 +307,7 @@ def process_remove_bg(raw: bytes):
     except ValueError as exc:
         raise ApiError(
             status_code=500,
-            code="INTERNAL_SERVER_ERROR",
+            code=ErrorCode.SERVER_MISCONFIGURATION,
             message="服務發生未預期錯誤。",
             details={"reason": "unsupported_model", "model": config.model_name},
         ) from exc
@@ -317,7 +318,7 @@ def process_remove_bg(raw: bytes):
         timing.base_remove_sec = round(time.perf_counter() - base_remove_started_at, 4)
     except Exception as exc:
         raise_gateway_error(
-            code="REMBG_EXECUTION_FAILED",
+            code=ErrorCode.REMBG_EXECUTION_FAILED,
             message="去背引擎執行失敗。",
             details={
                 "cause": str(exc),
@@ -338,7 +339,7 @@ def process_remove_bg(raw: bytes):
         raise
     except Exception as exc:
         raise_gateway_error(
-            code="POSTPROCESS_FAILED",
+            code=ErrorCode.POSTPROCESS_FAILED,
             message="去背後處理失敗。",
             details={
                 "cause": str(exc),
