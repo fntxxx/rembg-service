@@ -11,7 +11,7 @@ pinned: false
 
 去背服務（Background Removal Service），基於 FastAPI + rembg，部署於 Hugging Face Spaces。
 
-提供單張圖片去背 API。成功時直接回傳透明背景 PNG，失敗時維持統一 JSON error contract，並將固定處理策略收斂到伺服器端。
+提供單張圖片去背 API。成功時直接回傳透明背景 PNG，失敗時維持統一 JSON error contract，並將固定處理策略收斂到伺服器端。錯誤狀態碼會依認證、媒體型別、內容可處理性與下游引擎失敗分流。
 
 ---
 
@@ -313,7 +313,20 @@ curl -X POST \
 }
 ```
 
-### 422 請求驗證錯誤
+### 415 不支援的媒體型別
+
+```json
+{
+  "ok": false,
+  "error": {
+    "code": "UNSUPPORTED_MEDIA_TYPE",
+    "message": "Unsupported media type",
+    "details": null
+  }
+}
+```
+
+### 422 請求驗證錯誤 / 圖片內容不可處理
 
 ```json
 {
@@ -334,14 +347,14 @@ curl -X POST \
 }
 ```
 
-### 400 一般輸入錯誤
+### 400 一般請求錯誤（例如空檔案）
 
 ```json
 {
   "ok": false,
   "error": {
     "code": "BAD_REQUEST",
-    "message": "Invalid image",
+    "message": "Empty file",
     "details": null
   }
 }
@@ -437,8 +450,8 @@ pytest -q
 建議至少確認以下情境：
 
 - `.jpg` / `.jpeg` / `.png` / `.webp` / `.avif` / `.heic` / `.heif` 可通過前置驗證
-- `.svg` 與任何不在白名單中的副檔名會被 `400` 拒絕
-- `content_type` 若有帶值但不在白名單中，會被 `400` 拒絕
+- `.svg` 與任何不在白名單中的副檔名會被 `415` 拒絕
+- `content_type` 若有帶值但不在白名單中，會被 `415` 拒絕
 - `content_type` 若缺失，會退回只檢查副檔名
 
 若要手動驗證 OpenAPI：

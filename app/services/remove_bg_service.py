@@ -3,7 +3,6 @@ import time
 from dataclasses import dataclass
 
 import numpy as np
-from fastapi import HTTPException
 from PIL import Image
 from rembg import remove
 
@@ -15,6 +14,7 @@ from app.core.config import (
     DEFAULT_REJECT_LOW_CONFIDENCE,
     FINAL_OUTPUT_LONGEST_SIDE,
 )
+from app.core.exceptions import ApiError
 from app.core.session import get_session
 from app.domain.alpha_pipeline import (
     ALPHA_FOREGROUND_THRESHOLD,
@@ -82,7 +82,12 @@ def run_remove(in_bytes: bytes, model_name: str, quality: str) -> bytes:
 
 def _load_and_prepare_input(raw: bytes, max_side: int) -> tuple[Image.Image, bytes, float]:
     if not raw:
-        raise HTTPException(status_code=400, detail="Empty file")
+        raise ApiError(
+            status_code=400,
+            code="BAD_REQUEST",
+            message="Empty file",
+            details=None,
+        )
 
     try:
         resize_started_at = time.perf_counter()
@@ -97,7 +102,12 @@ def _load_and_prepare_input(raw: bytes, max_side: int) -> tuple[Image.Image, byt
         resize_sec = round(time.perf_counter() - resize_started_at, 4)
         return original_full, buf.getvalue(), resize_sec
     except Exception as exc:
-        raise HTTPException(status_code=400, detail="Invalid image") from exc
+        raise ApiError(
+            status_code=422,
+            code="UNPROCESSABLE_ENTITY",
+            message="Invalid image",
+            details=None,
+        ) from exc
 
 
 def _debug_alpha_metrics(alpha_np: np.ndarray) -> tuple[float, float]:
@@ -294,7 +304,12 @@ def process_remove_bg(raw: bytes):
     try:
         get_session(config.model_name)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise ApiError(
+            status_code=500,
+            code="INTERNAL_SERVER_ERROR",
+            message="服務發生未預期錯誤。",
+            details={"reason": "unsupported_model", "model": config.model_name},
+        ) from exc
 
     try:
         base_remove_started_at = time.perf_counter()
@@ -319,7 +334,7 @@ def process_remove_bg(raw: bytes):
             request_started_at=request_started_at,
             config=config,
         )
-    except HTTPException:
+    except ApiError:
         raise
     except Exception as exc:
         raise_gateway_error(

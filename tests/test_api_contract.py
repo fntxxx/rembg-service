@@ -173,7 +173,7 @@ def test_remove_bg_request_validation_error_format(client):
 
 def test_remove_bg_http_error_format(client, monkeypatch):
     def fake_process_remove_bg(*, raw: bytes):
-        raise HTTPException(status_code=400, detail="Invalid image")
+        raise HTTPException(status_code=415, detail="Unsupported media type")
 
     monkeypatch.setattr(routes_module, "process_remove_bg", fake_process_remove_bg)
 
@@ -183,12 +183,12 @@ def test_remove_bg_http_error_format(client, monkeypatch):
         headers=auth_headers(),
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 415
     assert response.json() == {
         "ok": False,
         "error": {
-            "code": "BAD_REQUEST",
-            "message": "Invalid image",
+            "code": "UNSUPPORTED_MEDIA_TYPE",
+            "message": "Unsupported media type",
             "details": None,
         },
     }
@@ -333,8 +333,9 @@ def test_remove_bg_rejects_svg(client, monkeypatch):
         headers=auth_headers(),
     )
 
-    assert response.status_code == 400
-    assert response.json()["error"]["message"] == "Invalid image"
+    assert response.status_code == 415
+    assert response.json()["error"]["code"] == "UNSUPPORTED_MEDIA_TYPE"
+    assert response.json()["error"]["message"] == "Unsupported media type"
     assert called["value"] is False
 
 
@@ -353,8 +354,9 @@ def test_remove_bg_rejects_disallowed_extension(client, monkeypatch):
         headers=auth_headers(),
     )
 
-    assert response.status_code == 400
-    assert response.json()["error"]["message"] == "Invalid image"
+    assert response.status_code == 415
+    assert response.json()["error"]["code"] == "UNSUPPORTED_MEDIA_TYPE"
+    assert response.json()["error"]["message"] == "Unsupported media type"
     assert called["value"] is False
 
 
@@ -373,8 +375,9 @@ def test_remove_bg_rejects_disallowed_content_type(client, monkeypatch):
         headers=auth_headers(),
     )
 
-    assert response.status_code == 400
-    assert response.json()["error"]["message"] == "Invalid image"
+    assert response.status_code == 415
+    assert response.json()["error"]["code"] == "UNSUPPORTED_MEDIA_TYPE"
+    assert response.json()["error"]["message"] == "Unsupported media type"
     assert called["value"] is False
 
 
@@ -392,6 +395,59 @@ def test_file_validation_allows_whitelisted_content_types(content_type):
     validate_image_content_type(content_type)
 
 
+
+
+
+def test_remove_bg_invalid_image_payload_returns_422(client):
+    response = client.post(
+        "/remove-bg",
+        files={"file": ("demo.png", b"not-a-real-image", "image/png")},
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "ok": False,
+        "error": {
+            "code": "UNPROCESSABLE_ENTITY",
+            "message": "Invalid image",
+            "details": None,
+        },
+    }
+
+
+def test_service_info_returns_500_when_internal_token_not_configured(client, monkeypatch):
+    monkeypatch.setattr("app.core.auth.get_internal_api_token", lambda: "")
+
+    response = client.get("/service-info")
+
+    assert response.status_code == 500
+    assert response.json()["error"]["code"] == "INTERNAL_SERVER_ERROR"
+    assert response.json()["error"]["details"]["reason"] == "internal_api_token_not_configured"
+
+
+def test_remove_bg_returns_500_when_model_configuration_is_invalid(client, monkeypatch):
+    monkeypatch.setattr("app.services.remove_bg_service._load_and_prepare_input", lambda raw, max_side: (object(), b"prepared-png", 0.01))
+    monkeypatch.setattr("app.services.remove_bg_service.get_session", lambda _model: (_ for _ in ()).throw(ValueError("Unsupported model")))
+
+    response = client.post(
+        "/remove-bg",
+        files={"file": ("demo.png", b"abc", "image/png")},
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 500
+    assert response.json() == {
+        "ok": False,
+        "error": {
+            "code": "INTERNAL_SERVER_ERROR",
+            "message": "服務發生未預期錯誤。",
+            "details": {
+                "reason": "unsupported_model",
+                "model": DEFAULT_MODEL,
+            },
+        },
+    }
 
 def test_openapi_remove_bg_description_mentions_whitelist_rules(client):
     schema = client.get("/openapi.json").json()
@@ -426,3 +482,13 @@ def test_openapi_remove_bg_descriptions_use_shared_policy_text(client):
 
     assert REMOVE_BG_RULES_DESCRIPTION in remove_bg["description"]
     assert file_property["description"] == REMOVE_BG_FILE_FIELD_DESCRIPTION
+
+
+def test_openapi_remove_bg_declares_415_and_422_errors(client):
+    schema = client.get("/openapi.json").json()
+    responses = schema["paths"]["/remove-bg"]["post"]["responses"]
+
+    assert "415" in responses
+    assert "422" in responses
+    assert "Unsupported media type" in str(responses["415"])
+    assert "Invalid image" in str(responses["422"])

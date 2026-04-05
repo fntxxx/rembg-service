@@ -27,14 +27,14 @@ router = APIRouter()
 COMMON_ERROR_RESPONSES = {
     400: {
         "model": GenericErrorResponse,
-        "description": "一般請求錯誤，例如空檔案、無效圖片或不支援的輸入。",
+        "description": "一般請求錯誤，例如空檔案。",
         "content": {
             "application/json": {
                 "example": {
                     "ok": False,
                     "error": {
                         "code": "BAD_REQUEST",
-                        "message": "Invalid image",
+                        "message": "Empty file",
                         "details": None,
                     },
                 }
@@ -57,14 +57,41 @@ COMMON_ERROR_RESPONSES = {
             }
         },
     },
+    415: {
+        "model": GenericErrorResponse,
+        "description": "不支援的媒體型別，例如副檔名不在白名單、content_type 不允許，或 SVG。",
+        "content": {
+            "application/json": {
+                "example": {
+                    "ok": False,
+                    "error": {
+                        "code": "UNSUPPORTED_MEDIA_TYPE",
+                        "message": "Unsupported media type",
+                        "details": None,
+                    },
+                }
+            }
+        },
+    },
     422: {
-        "description": "422 可能是請求驗證錯誤，或圖片進入處理流程後因遮罩低信心 / 邊界品質不足而被拒絕。",
+        "description": "422 可能是請求驗證錯誤、圖片內容無法解碼，或圖片進入處理流程後因遮罩低信心 / 邊界品質不足而被拒絕。",
         "content": {
             "application/json": {
                 "examples": {
                     "request_validation_error": {
                         "summary": "Missing multipart file field",
                         "value": RequestValidationErrorResponse.model_config["json_schema_extra"]["example"],
+                    },
+                    "invalid_image_payload": {
+                        "summary": "Image payload cannot be decoded",
+                        "value": {
+                            "ok": False,
+                            "error": {
+                                "code": "UNPROCESSABLE_ENTITY",
+                                "message": "Invalid image",
+                                "details": None,
+                            },
+                        },
                     },
                     "low_confidence_mask": {
                         "summary": "Rejected due to low confidence mask",
@@ -76,7 +103,7 @@ COMMON_ERROR_RESPONSES = {
     },
     500: {
         "model": GenericErrorResponse,
-        "description": "服務發生未預期錯誤。",
+        "description": "服務內部設定錯誤或未預期錯誤。",
         "content": {
             "application/json": {
                 "example": {
@@ -219,7 +246,8 @@ def warmup():
         "請使用 `multipart/form-data`，並以 `file` 作為欄位名稱。"
         "\n\n"
         "成功時直接回傳 `image/png`。"
-        "若遮罩信心不足或邊界品質不足，則維持 `422 application/json` 錯誤 envelope。"
+        "若副檔名或 `content_type` 不在白名單內，會回傳 `415 application/json`。"
+        "若圖片內容無法解碼，或遮罩信心不足 / 邊界品質不足，則維持 `422 application/json` 錯誤 envelope。"
         f"{REMOVE_BG_RULES_DESCRIPTION}"
     ),
     response_description="去背成功時回傳 PNG；失敗時維持既有 JSON 錯誤格式。",
