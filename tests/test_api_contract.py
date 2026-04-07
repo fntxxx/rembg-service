@@ -33,6 +33,39 @@ import app.main as main_module
 import app.api.routes as routes_module
 
 
+def test_register_heif_plugins_calls_available_openers(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(
+        main_module,
+        "pillow_heif",
+        types.SimpleNamespace(
+            register_heif_opener=lambda: calls.append("heif"),
+            register_avif_opener=lambda: calls.append("avif"),
+        ),
+    )
+
+    main_module._register_heif_plugins()
+
+    assert calls == ["heif", "avif"]
+
+
+def test_register_heif_plugins_skips_missing_avif_opener(monkeypatch):
+    calls = []
+
+    monkeypatch.setattr(
+        main_module,
+        "pillow_heif",
+        types.SimpleNamespace(
+            register_heif_opener=lambda: calls.append("heif"),
+        ),
+    )
+
+    main_module._register_heif_plugins()
+
+    assert calls == ["heif"]
+
+
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setattr(main_module, "warmup_models", lambda: None)

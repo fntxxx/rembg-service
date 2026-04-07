@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pillow_heif import register_heif_opener
+import pillow_heif
 
 from app.api.routes import router
 from app.core.exceptions import ApiError
@@ -16,7 +16,17 @@ from app.schemas.responses import (
     build_validation_error,
 )
 
-register_heif_opener()
+def _register_heif_plugins() -> None:
+    register_heif_opener = getattr(pillow_heif, "register_heif_opener", None)
+    if callable(register_heif_opener):
+        register_heif_opener()
+
+    register_avif_opener = getattr(pillow_heif, "register_avif_opener", None)
+    if callable(register_avif_opener):
+        register_avif_opener()
+
+
+_register_heif_plugins()
 
 
 @asynccontextmanager
