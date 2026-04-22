@@ -1,0 +1,29 @@
+name: Warmup Service
+
+on:
+  schedule:
+    - cron: '*/8 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  warmup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      WARMUP_URL: ${{ secrets.WARMUP_URL }}
+      INTERNAL_API_TOKEN: ${{ secrets.INTERNAL_API_TOKEN }}
+    steps:
+      - name: Ping warmup endpoint
+        run: |
+          curl \
+            --fail \
+            --silent \
+            --show-error \
+            --retry 3 \
+            --retry-delay 5 \
+            --retry-max-time 40 \
+            --max-time 120 \
+            -H "Authorization: Bearer $INTERNAL_API_TOKEN" \
+            "$WARMUP_URL"
